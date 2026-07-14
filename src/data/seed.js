@@ -13,7 +13,7 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 4
+const SEED_VERSION = 5
 
 const SEED_USERS = [
   {
@@ -72,6 +72,7 @@ const SEED_USERS = [
     username: 'user_artist',
     role: 'artist',
     artistName: 'هنرمند نمونه',
+    bio: 'هنرمند الکترونیک با تمرکز روی فضای شهری و بافت صوتی شبانه. از سال ۱۳۹۸ در حال انتشار تک‌آهنگ و آلبوم در سپتیفای است.',
     subscription: 'basic',
     avatar: null,
     status: 'approved',

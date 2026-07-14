@@ -35,6 +35,7 @@ export default function ProfilePage() {
     isUsernameTaken,
     updateUser,
     toggleFollow,
+    getCatalog,
     defaultAvatar,
   } = useAuth()
 
@@ -70,6 +71,21 @@ export default function ProfilePage() {
   const liveProfile = getUserById(profile.id) || profile
   const isFollowing = currentUser.following?.includes(liveProfile.id)
   const avatarEditable = isOwn && canChangeAvatar(currentUser.subscription)
+  const isArtist = liveProfile.role === 'artist'
+  const isVerifiedArtist = isArtist && liveProfile.status === 'approved'
+  const viewerIsGold = currentUser.subscription === 'gold'
+  const catalog = getCatalog()
+  const artistAlbums = isArtist
+    ? catalog.albums.filter((a) => a.artistId === liveProfile.id)
+    : []
+  const artistSingles = isArtist
+    ? catalog.tracks.filter((t) => t.artistId === liveProfile.id && !t.albumId)
+    : []
+  const artistTracks = isArtist
+    ? catalog.tracks.filter((t) => t.artistId === liveProfile.id)
+    : []
+  const totalStreams = artistTracks.reduce((sum, t) => sum + (t.plays || 0), 0)
+  const totalListeners = liveProfile.followers?.length ?? 0
 
   function applyUpdate(result, { forUsername = false } = {}) {
     if (!result.ok) {
@@ -101,6 +117,8 @@ export default function ProfilePage() {
       setDraft({ dailyStreams: String(liveProfile.dailyStreams ?? 0) })
     } else if (field === 'avatar') {
       setDraft({ avatar: liveProfile.avatar || '' })
+    } else if (field === 'bio') {
+      setDraft({ bio: liveProfile.bio || '' })
     }
   }
 
@@ -193,6 +211,19 @@ export default function ProfilePage() {
       setMessage('عکس پروفایل ذخیره شد.')
     }
 
+    if (editing === 'bio') {
+      if (
+        !applyUpdate(
+          updateUser(liveProfile.id, {
+            bio: draft.bio.trim(),
+          }),
+        )
+      ) {
+        return
+      }
+      setMessage('بیوگرافی ذخیره شد.')
+    }
+
     setEditing(null)
     setDraft({})
   }
@@ -235,13 +266,24 @@ export default function ProfilePage() {
           height={112}
         />
         <div className="profile__hero-text">
-          <h1>{liveProfile.displayName}</h1>
+          <h1 className="profile__title">
+            <span>{liveProfile.artistName || liveProfile.displayName}</span>
+            {isVerifiedArtist ? (
+              <span className="profile__verified" title="هنرمند تأییدشده">
+                نشان هنرمند تأییدشده
+              </span>
+            ) : null}
+          </h1>
           <p className="profile__username" dir="ltr">
             @{liveProfile.username}
           </p>
-          <span className={`profile__plan profile__plan--${liveProfile.subscription || 'basic'}`}>
-            {subscriptionLabel(liveProfile.subscription)}
-          </span>
+          {isArtist && liveProfile.status === 'pending' ? (
+            <span className="profile__plan">در انتظار تأیید</span>
+          ) : (
+            <span className={`profile__plan profile__plan--${liveProfile.subscription || 'basic'}`}>
+              {subscriptionLabel(liveProfile.subscription)}
+            </span>
+          )}
         </div>
         <div className="profile__hero-actions">
           {!isOwn ? (
@@ -277,6 +319,99 @@ export default function ProfilePage() {
           <span>استریم امروز</span>
         </div>
       </section>
+
+      {isArtist ? (
+        <>
+          <section className="profile__card">
+            <div className="profile__card-head">
+              <h2>بیوگرافی</h2>
+              {isOwn && editing !== 'bio' ? (
+                <button type="button" className="profile__link-btn" onClick={() => startEdit('bio')}>
+                  ویرایش
+                </button>
+              ) : null}
+            </div>
+            {editing === 'bio' ? (
+              <form className="profile__form" onSubmit={saveEdit}>
+                <label className="profile__form-span">
+                  متن بیوگرافی
+                  <textarea
+                    rows={4}
+                    value={draft.bio}
+                    onChange={(e) => setDraft((d) => ({ ...d, bio: e.target.value }))}
+                  />
+                </label>
+                <div className="profile__form-actions">
+                  <button type="submit" className="profile__btn">
+                    ذخیره
+                  </button>
+                  <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
+                    انصراف
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="profile__hint">{liveProfile.bio || 'بیوگرافی ثبت نشده است.'}</p>
+            )}
+          </section>
+
+          {viewerIsGold ? (
+            <section className="profile__card profile__card--gold-stats">
+              <div className="profile__card-head">
+                <h2>آمار کلی (ویژه طلایی)</h2>
+              </div>
+              <div className="profile__stats profile__stats--nested">
+                <div>
+                  <strong>{totalListeners.toLocaleString('fa-IR')}</strong>
+                  <span>شنوندگان</span>
+                </div>
+                <div>
+                  <strong>{totalStreams.toLocaleString('fa-IR')}</strong>
+                  <span>مجموع استریم‌ها</span>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          <section className="profile__card">
+            <div className="profile__card-head">
+              <h2>آلبوم‌ها</h2>
+            </div>
+            {artistAlbums.length === 0 ? (
+              <p className="profile__hint">هنوز آلبومی منتشر نشده است.</p>
+            ) : (
+              <div className="profile__releases">
+                {artistAlbums.map((album) => (
+                  <article key={album.id} className="profile__release">
+                    <img src={album.cover} alt="" />
+                    <h3>{album.title}</h3>
+                    <p dir="ltr">{album.releasedAt}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="profile__card">
+            <div className="profile__card-head">
+              <h2>تک‌آهنگ‌ها</h2>
+            </div>
+            {artistSingles.length === 0 ? (
+              <p className="profile__hint">هنوز تک‌آهنگی منتشر نشده است.</p>
+            ) : (
+              <div className="profile__releases">
+                {artistSingles.map((track) => (
+                  <article key={track.id} className="profile__release">
+                    <img src={track.cover} alt="" />
+                    <h3>{track.title}</h3>
+                    <p>{track.plays.toLocaleString('fa-IR')} پخش</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : null}
 
       <section className="profile__card">
         <div className="profile__card-head">

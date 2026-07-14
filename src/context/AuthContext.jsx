@@ -123,6 +123,7 @@ export function AuthProvider({ children }) {
       artistName: data.artistName.trim(),
       samples: data.samples,
       status: 'pending',
+      bio: '',
       subscription: 'basic',
       avatar: null,
       birthDate: null,
