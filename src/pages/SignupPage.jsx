@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import PrivacyModal from '../components/PrivacyModal'
 import './AuthPages.css'
@@ -23,7 +23,7 @@ const initialArtist = {
 }
 
 export default function SignupPage() {
-  const { ready, registerListener, registerArtist } = useAuth()
+  const { ready, currentUser, registerListener, registerArtist } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState('listener')
   const [listener, setListener] = useState(initialListener)
@@ -33,6 +33,7 @@ export default function SignupPage() {
   const [privacyOpen, setPrivacyOpen] = useState(false)
 
   if (!ready) return null
+  if (currentUser) return <Navigate to="/home" replace />
 
   function patchListener(patch) {
     setError('')

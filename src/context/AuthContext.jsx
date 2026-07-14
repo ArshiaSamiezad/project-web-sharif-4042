@@ -151,6 +151,15 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function getCatalog() {
+    return {
+      users: getUsers(),
+      playlists: storage.getItem('playlists', []),
+      albums: storage.getItem('albums', []),
+      tracks: storage.getItem('tracks', []),
+    }
+  }
+
   const value = {
     ready,
     currentUser,
@@ -159,6 +168,7 @@ export function AuthProvider({ children }) {
     registerListener,
     registerArtist,
     requestPasswordReset,
+    getCatalog,
     defaultAvatar: DEFAULT_AVATAR,
   }
 

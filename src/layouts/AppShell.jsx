@@ -1,0 +1,68 @@
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import './AppShell.css'
+
+const NAV = [
+  { to: '/home', label: 'خانه', end: true },
+  { to: '/playlists', label: 'پلی‌لیست‌ها' },
+  { to: '/catalog', label: 'آلبوم‌ها و تک‌آهنگ‌ها' },
+  { to: '/profile', label: 'نمایه کاربری' },
+  { to: '/settings', label: 'تنظیمات برنامه' },
+]
+
+export default function AppShell() {
+  const { currentUser, logout, defaultAvatar } = useAuth()
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  return (
+    <div className="shell">
+      <aside className="shell__sidebar">
+        <p className="shell__brand">Sepatify</p>
+        <nav className="shell__nav" aria-label="منوی اصلی">
+          {NAV.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                isActive ? 'shell__link is-active' : 'shell__link'
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+        <button type="button" className="shell__logout" onClick={handleLogout}>
+          خروج
+        </button>
+      </aside>
+
+      <div className="shell__main">
+        <header className="shell__top">
+          <div className="shell__user">
+            <img
+              src={currentUser.avatar || defaultAvatar}
+              alt=""
+              width={44}
+              height={44}
+            />
+            <div>
+              <p className="shell__name">{currentUser.displayName}</p>
+              {currentUser.subscription === 'gold' ? (
+                <span className="shell__badge">طلایی</span>
+              ) : null}
+            </div>
+          </div>
+        </header>
+        <div className="shell__page">
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  )
+}

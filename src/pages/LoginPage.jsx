@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './AuthPages.css'
 
 export default function LoginPage() {
-  const { ready, login, requestPasswordReset } = useAuth()
+  const { ready, currentUser, login, requestPasswordReset } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [mode, setMode] = useState('login')
@@ -24,6 +24,7 @@ export default function LoginPage() {
   }, [location, navigate])
 
   if (!ready) return null
+  if (currentUser) return <Navigate to="/home" replace />
 
   function handleLogin(e) {
     e.preventDefault()
@@ -36,7 +37,7 @@ export default function LoginPage() {
       setFeedback({ type: 'error', text: result.error })
       return
     }
-    setFeedback({ type: 'success', text: 'درست است.' })
+    navigate('/home', { replace: true })
   }
 
   function handleReset(e) {
@@ -192,6 +193,7 @@ export default function LoginPage() {
           <p>حساب‌های نمونه (رمز: password)</p>
           <ul>
             <li>listener@sepatify.test</li>
+            <li>gold@sepatify.test</li>
             <li>artist@sepatify.test</li>
             <li>support@sepatify.test</li>
             <li>admin@sepatify.test</li>
