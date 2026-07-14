@@ -193,6 +193,7 @@ export default function LoginPage() {
           <p>حساب‌های نمونه (رمز: password)</p>
           <ul>
             <li>listener@sepatify.test</li>
+            <li>silver@sepatify.test</li>
             <li>gold@sepatify.test</li>
             <li>artist@sepatify.test</li>
             <li>support@sepatify.test</li>

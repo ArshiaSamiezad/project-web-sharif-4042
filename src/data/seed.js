@@ -13,7 +13,7 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 3
+const SEED_VERSION = 4
 
 const SEED_USERS = [
   {
@@ -25,8 +25,10 @@ const SEED_USERS = [
     role: 'listener',
     subscription: 'basic',
     avatar: null,
-    followers: [],
-    following: [],
+    birthDate: '2000-05-12',
+    gender: 'female',
+    followers: ['u-gold'],
+    following: ['u-gold', 'u-artist'],
     dailyStreams: 12,
     recentPlaylistIds: ['pl-1', 'pl-2', 'pl-3'],
   },
@@ -39,10 +41,28 @@ const SEED_USERS = [
     role: 'listener',
     subscription: 'gold',
     avatar: null,
-    followers: [],
-    following: [],
+    birthDate: '1998-11-03',
+    gender: 'male',
+    followers: ['u-listener', 'u-silver'],
+    following: ['u-artist'],
     dailyStreams: 40,
     recentPlaylistIds: ['pl-2', 'pl-1', 'pl-4'],
+  },
+  {
+    id: 'u-silver',
+    email: 'silver@sepatify.test',
+    password: 'password',
+    displayName: 'کاربر نقره‌ای',
+    username: 'user_silver',
+    role: 'listener',
+    subscription: 'silver',
+    avatar: null,
+    birthDate: '2001-02-20',
+    gender: 'other',
+    followers: [],
+    following: ['u-gold'],
+    dailyStreams: 18,
+    recentPlaylistIds: ['pl-1'],
   },
   {
     id: 'u-artist',
@@ -55,7 +75,9 @@ const SEED_USERS = [
     subscription: 'basic',
     avatar: null,
     status: 'approved',
-    followers: [],
+    birthDate: null,
+    gender: null,
+    followers: ['u-listener', 'u-gold'],
     following: [],
     dailyStreams: 0,
     recentPlaylistIds: [],
@@ -69,6 +91,8 @@ const SEED_USERS = [
     role: 'support',
     subscription: 'basic',
     avatar: null,
+    birthDate: null,
+    gender: null,
     followers: [],
     following: [],
     dailyStreams: 0,
@@ -83,6 +107,8 @@ const SEED_USERS = [
     role: 'admin',
     subscription: 'basic',
     avatar: null,
+    birthDate: null,
+    gender: null,
     followers: [],
     following: [],
     dailyStreams: 0,
@@ -227,18 +253,9 @@ export function ensureSeedData(storage) {
   if (!existingUsers || existingUsers.length === 0) {
     storage.setItem('users', SEED_USERS)
   } else {
-    const byEmail = new Map(existingUsers.map((u) => [u.email.toLowerCase(), u]))
-    for (const seedUser of SEED_USERS) {
-      if (!byEmail.has(seedUser.email.toLowerCase())) {
-        existingUsers.push(seedUser)
-      } else {
-        const current = byEmail.get(seedUser.email.toLowerCase())
-        if (!current.recentPlaylistIds?.length && seedUser.recentPlaylistIds?.length) {
-          current.recentPlaylistIds = seedUser.recentPlaylistIds
-        }
-      }
-    }
-    storage.setItem('users', existingUsers)
+    const seedEmails = new Set(SEED_USERS.map((u) => u.email.toLowerCase()))
+    const customUsers = existingUsers.filter((u) => !seedEmails.has(u.email.toLowerCase()))
+    storage.setItem('users', [...SEED_USERS, ...customUsers])
   }
 
   storage.setItem('playlists', SEED_PLAYLISTS)

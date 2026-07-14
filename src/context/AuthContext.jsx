@@ -149,6 +149,72 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function getUserById(userId) {
+    return getUsers().find((u) => u.id === userId) || null
+  }
+
+  function getUserByUsername(username) {
+    const key = String(username ?? '').trim().toLowerCase()
+    if (!key) return null
+    return getUsers().find((u) => u.username?.toLowerCase() === key) || null
+  }
+
+  function isUsernameTaken(username, excludeUserId = null) {
+    const key = String(username ?? '').trim().toLowerCase()
+    if (!key) return false
+    return getUsers().some(
+      (u) => u.username?.toLowerCase() === key && u.id !== excludeUserId,
+    )
+  }
+
+  function updateUser(userId, patch) {
+    const users = getUsers()
+
+    if (patch.username !== undefined) {
+      const nextName = String(patch.username).trim()
+      if (isUsernameTaken(nextName, userId)) {
+        return { ok: false, error: 'این نام کاربری قبلاً استفاده شده است.' }
+      }
+      patch = { ...patch, username: nextName }
+    }
+
+    const next = users.map((u) => (u.id === userId ? { ...u, ...patch } : u))
+    persistUsers(next)
+    const updated = next.find((u) => u.id === userId) || null
+    if (currentUser?.id === userId) setCurrentUser(updated)
+    return { ok: true, user: updated }
+  }
+
+  function toggleFollow(targetId) {
+    if (!currentUser || currentUser.id === targetId) {
+      return { ok: false, error: 'امکان دنبال کردن این کاربر وجود ندارد.' }
+    }
+
+    const users = getUsers()
+    const me = users.find((u) => u.id === currentUser.id)
+    const target = users.find((u) => u.id === targetId)
+    if (!me || !target) {
+      return { ok: false, error: 'کاربر پیدا نشد.' }
+    }
+
+    const isFollowing = me.following.includes(targetId)
+    const myFollowing = isFollowing
+      ? me.following.filter((id) => id !== targetId)
+      : [...me.following, targetId]
+    const theirFollowers = isFollowing
+      ? target.followers.filter((id) => id !== me.id)
+      : [...target.followers, me.id]
+
+    const next = users.map((u) => {
+      if (u.id === me.id) return { ...u, following: myFollowing }
+      if (u.id === target.id) return { ...u, followers: theirFollowers }
+      return u
+    })
+    persistUsers(next)
+    setCurrentUser(next.find((u) => u.id === me.id))
+    return { ok: true, following: !isFollowing }
+  }
+
   function getCatalog() {
     return {
       users: getUsers(),
@@ -167,6 +233,11 @@ export function AuthProvider({ children }) {
     registerArtist,
     requestPasswordReset,
     getCatalog,
+    getUserById,
+    getUserByUsername,
+    isUsernameTaken,
+    updateUser,
+    toggleFollow,
     defaultAvatar: DEFAULT_AVATAR,
   }
 

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import './AppShell.css'
 
@@ -13,6 +13,7 @@ const NAV = [
 export default function AppShell() {
   const { currentUser, logout, defaultAvatar } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   function handleLogout() {
     logout()
@@ -29,9 +30,11 @@ export default function AppShell() {
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) =>
-                isActive ? 'shell__link is-active' : 'shell__link'
-              }
+              className={({ isActive }) => {
+                const profileActive =
+                  item.to === '/profile' && location.pathname.startsWith('/profile')
+                return isActive || profileActive ? 'shell__link is-active' : 'shell__link'
+              }}
             >
               {item.label}
             </NavLink>
@@ -55,6 +58,8 @@ export default function AppShell() {
               <p className="shell__name">{currentUser.displayName}</p>
               {currentUser.subscription === 'gold' ? (
                 <span className="shell__badge">طلایی</span>
+              ) : currentUser.subscription === 'silver' ? (
+                <span className="shell__badge shell__badge--silver">نقره‌ای</span>
               ) : null}
             </div>
           </div>

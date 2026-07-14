@@ -7,10 +7,16 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
   height: 100%;
+  max-width: 100%;
 }
 
 body {
@@ -19,9 +25,20 @@ body {
   color: var(--color-text);
   direction: rtl;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
+  max-width: 100%;
 }
