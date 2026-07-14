@@ -1,0 +1,213 @@
+.login-page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  color: var(--color-text);
+  overflow: hidden;
+}
+
+.login-page__atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: var(--gradient-app);
+  animation: atmosphere-drift 18s ease-in-out infinite alternate;
+}
+
+.login-page__grain {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.16;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+.login-page__content {
+  width: min(100%, 26rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.login-page__brand {
+  text-align: center;
+}
+
+.login-page__mark {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: clamp(2.6rem, 7vw, 3.6rem);
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: brand-glow 4s ease-in-out infinite alternate;
+}
+
+.login-page__headline {
+  margin-top: 1rem;
+  font-family: 'Vazirmatn', sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  color: var(--color-text);
+}
+
+.login-page__sub {
+  margin-top: 0.5rem;
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: rise-in 0.55s 0.12s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.login-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.login-form__field input {
+  width: 100%;
+  border: 1px solid var(--color-stroke);
+  border-radius: 0.55rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.85rem 0.95rem;
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-form__field input:focus {
+  border-color: color-mix(in srgb, var(--color-illuminating) 70%, transparent);
+  background: var(--color-surface-strong);
+  box-shadow: var(--focus-ring);
+}
+
+.login-form__error {
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 0.88rem;
+  color: var(--color-danger);
+}
+
+.login-form__success {
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--color-ok);
+}
+
+.login-form__submit {
+  margin-top: 0.25rem;
+  border: none;
+  border-radius: 0.55rem;
+  padding: 0.95rem 1.1rem;
+  font-family: 'Vazirmatn', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-on-accent);
+  background: var(--gradient-cta);
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
+}
+
+.login-form__submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.login-form__submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.login-form__link {
+  border: none;
+  background: none;
+  padding: 0.35rem;
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 0.92rem;
+  color: var(--color-illuminating);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.login-form__link:hover {
+  color: var(--color-illuminating-soft);
+}
+
+.login-page__hints {
+  font-family: 'Vazirmatn', sans-serif;
+  font-size: 0.8rem;
+  color: var(--color-ultimate-grey);
+  text-align: center;
+  line-height: 1.6;
+  opacity: 0.95;
+}
+
+.login-page__hints ul {
+  list-style: none;
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  justify-content: center;
+  direction: ltr;
+  font-size: 0.75rem;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes atmosphere-drift {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.06) translate(-1.5%, 1%);
+  }
+}
+
+@keyframes brand-glow {
+  from {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  to {
+    filter: drop-shadow(var(--shadow-brand-glow));
+  }
+}
+
+@media (max-width: 480px) {
+  .login-page {
+    place-items: start center;
+    padding-top: 2.5rem;
+  }
+}
