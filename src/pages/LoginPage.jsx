@@ -1,22 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import './LoginPage.css'
+import './AuthPages.css'
 
 export default function LoginPage() {
   const { ready, login, requestPasswordReset } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [resetEmail, setResetEmail] = useState('')
   const [feedback, setFeedback] = useState(null)
+  const [notice, setNotice] = useState('')
   const [resetMessage, setResetMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (location.state?.notice) {
+      setNotice(location.state.notice)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location, navigate])
 
   if (!ready) return null
 
   function handleLogin(e) {
     e.preventDefault()
     setFeedback(null)
+    setNotice('')
     setSubmitting(true)
     const result = login(email, password)
     setSubmitting(false)
@@ -40,17 +52,17 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="login-page">
-      <div className="login-page__atmosphere" aria-hidden="true" />
-      <div className="login-page__grain" aria-hidden="true" />
+    <main className="auth-page">
+      <div className="auth-page__atmosphere" aria-hidden="true" />
+      <div className="auth-page__grain" aria-hidden="true" />
 
-      <div className="login-page__content">
-        <header className="login-page__brand">
-          <p className="login-page__mark">Sepatify</p>
-          <h1 className="login-page__headline">
+      <div className="auth-page__content">
+        <header className="auth-page__brand">
+          <p className="auth-page__mark">Sepatify</p>
+          <h1 className="auth-page__headline">
             {mode === 'login' ? 'ورود به حساب' : 'بازیابی رمز عبور'}
           </h1>
-          <p className="login-page__sub">
+          <p className="auth-page__sub">
             {mode === 'login'
               ? 'با ایمیل و رمز عبور وارد شوید.'
               : 'ایمیل حساب خود را وارد کنید تا لینک بازیابی ارسال شود.'}
@@ -58,8 +70,8 @@ export default function LoginPage() {
         </header>
 
         {mode === 'login' ? (
-          <form className="login-form" onSubmit={handleLogin} noValidate>
-            <label className="login-form__field">
+          <form className="auth-form" onSubmit={handleLogin} noValidate>
+            <label className="auth-form__field">
               <span>ایمیل</span>
               <input
                 type="email"
@@ -75,7 +87,7 @@ export default function LoginPage() {
               />
             </label>
 
-            <label className="login-form__field">
+            <label className="auth-form__field">
               <span>رمز عبور</span>
               <input
                 type="password"
@@ -91,10 +103,16 @@ export default function LoginPage() {
               />
             </label>
 
+            {notice ? (
+              <p className="auth-form__success" role="status">
+                {notice}
+              </p>
+            ) : null}
+
             {feedback ? (
               <p
                 className={
-                  feedback.type === 'success' ? 'login-form__success' : 'login-form__error'
+                  feedback.type === 'success' ? 'auth-form__success' : 'auth-form__error'
                 }
                 role={feedback.type === 'success' ? 'status' : 'alert'}
               >
@@ -102,16 +120,17 @@ export default function LoginPage() {
               </p>
             ) : null}
 
-            <button className="login-form__submit" type="submit" disabled={submitting}>
+            <button className="auth-form__submit" type="submit" disabled={submitting}>
               ورود
             </button>
 
             <button
               type="button"
-              className="login-form__link"
+              className="auth-form__link"
               onClick={() => {
                 setMode('reset')
                 setFeedback(null)
+                setNotice('')
                 setResetMessage('')
                 setResetEmail(email)
               }}
@@ -120,8 +139,8 @@ export default function LoginPage() {
             </button>
           </form>
         ) : (
-          <form className="login-form" onSubmit={handleReset} noValidate>
-            <label className="login-form__field">
+          <form className="auth-form" onSubmit={handleReset} noValidate>
+            <label className="auth-form__field">
               <span>ایمیل</span>
               <input
                 type="email"
@@ -135,23 +154,23 @@ export default function LoginPage() {
             </label>
 
             {feedback?.type === 'error' ? (
-              <p className="login-form__error" role="alert">
+              <p className="auth-form__error" role="alert">
                 {feedback.text}
               </p>
             ) : null}
             {resetMessage ? (
-              <p className="login-form__success" role="status">
+              <p className="auth-form__success" role="status">
                 {resetMessage}
               </p>
             ) : null}
 
-            <button className="login-form__submit" type="submit">
+            <button className="auth-form__submit" type="submit">
               ارسال لینک بازیابی
             </button>
 
             <button
               type="button"
-              className="login-form__link"
+              className="auth-form__link"
               onClick={() => {
                 setMode('login')
                 setFeedback(null)
@@ -163,7 +182,13 @@ export default function LoginPage() {
           </form>
         )}
 
-        <aside className="login-page__hints">
+        {mode === 'login' ? (
+          <p className="auth-page__switch">
+            حساب ندارید؟ <Link to="/signup">ثبت‌نام</Link>
+          </p>
+        ) : null}
+
+        <aside className="auth-page__hints">
           <p>حساب‌های نمونه (رمز: password)</p>
           <ul>
             <li>listener@sepatify.test</li>

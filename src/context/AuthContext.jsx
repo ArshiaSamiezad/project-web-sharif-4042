@@ -4,6 +4,10 @@ import { ensureSeedData, DEFAULT_AVATAR } from '../data/seed'
 
 const AuthContext = createContext(null)
 
+function generateUsername() {
+  return `user_${Math.random().toString(36).slice(2, 8)}`
+}
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [ready, setReady] = useState(false)
@@ -23,6 +27,10 @@ export function AuthProvider({ children }) {
     return storage.getItem('users', [])
   }
 
+  function persistUsers(users) {
+    storage.setItem('users', users)
+  }
+
   function setSession(user) {
     setCurrentUser(user)
     if (user) storage.setItem('sessionUserId', user.id)
@@ -37,6 +45,9 @@ export function AuthProvider({ children }) {
     if (!user) {
       return { ok: false, error: 'ایمیل یا رمز عبور نادرست است.' }
     }
+    if (user.role === 'artist' && user.status === 'pending') {
+      return { ok: false, error: 'حساب هنرمند شما در وضعیت «در انتظار تأیید» است.' }
+    }
     setSession(user)
     return { ok: true, user }
   }
@@ -45,20 +56,98 @@ export function AuthProvider({ children }) {
     setSession(null)
   }
 
+  function registerListener(data) {
+    const users = getUsers()
+    const email = data.email.trim().toLowerCase()
+
+    if (users.some((u) => u.email.toLowerCase() === email)) {
+      return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
+    }
+    if (data.password !== data.confirmPassword) {
+      return { ok: false, error: 'رمز عبور و تأیید آن یکسان نیستند.' }
+    }
+    if (!data.acceptedPrivacy) {
+      return { ok: false, error: 'پذیرش سیاست حریم خصوصی الزامی است.' }
+    }
+    if (!data.displayName.trim()) {
+      return { ok: false, error: 'نام نمایشی را وارد کنید.' }
+    }
+    if (!data.birthDate) {
+      return { ok: false, error: 'تاریخ تولد را وارد کنید.' }
+    }
+    if (!data.gender) {
+      return { ok: false, error: 'جنسیت را انتخاب کنید.' }
+    }
+
+    const user = {
+      id: `u-${Date.now()}`,
+      email,
+      password: data.password,
+      displayName: data.displayName.trim(),
+      username: generateUsername(),
+      role: 'listener',
+      subscription: 'basic',
+      avatar: null,
+      birthDate: data.birthDate,
+      gender: data.gender,
+      followers: [],
+      following: [],
+      dailyStreams: 0,
+      recentPlaylistIds: [],
+    }
+    persistUsers([...users, user])
+    return { ok: true, user }
+  }
+
+  function registerArtist(data) {
+    const users = getUsers()
+    const email = data.email.trim().toLowerCase()
+
+    if (users.some((u) => u.email.toLowerCase() === email)) {
+      return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
+    }
+    if (data.password !== data.confirmPassword) {
+      return { ok: false, error: 'رمز عبور و تأیید آن یکسان نیستند.' }
+    }
+    if (!data.artistName.trim()) {
+      return { ok: false, error: 'نام هنری را وارد کنید.' }
+    }
+    if (!data.samples?.length) {
+      return { ok: false, error: 'حداقل یک نمونه کار اضافه کنید.' }
+    }
+
+    const user = {
+      id: `u-${Date.now()}`,
+      email,
+      password: data.password,
+      displayName: data.artistName.trim(),
+      username: generateUsername(),
+      role: 'artist',
+      artistName: data.artistName.trim(),
+      samples: data.samples,
+      status: 'pending',
+      subscription: 'basic',
+      avatar: null,
+      birthDate: null,
+      gender: null,
+      followers: [],
+      following: [],
+      dailyStreams: 0,
+      recentPlaylistIds: [],
+    }
+    persistUsers([...users, user])
+    return { ok: true, user, pending: true }
+  }
+
   function requestPasswordReset(email) {
     const trimmed = email.trim().toLowerCase()
     if (!trimmed) {
       return { ok: false, error: 'ایمیل را وارد کنید.' }
     }
-    const users = getUsers()
-    const exists = users.some((u) => u.email.toLowerCase() === trimmed)
-    // Always show success to avoid leaking which emails exist; still note mock.
-    if (!exists) {
-      // intentional no-branch difference for mock UI — same message either way
-    }
     return {
       ok: true,
-      message: 'اگر این ایمیل در سامانه ثبت شده باشد، لینک بازیابی رمز ارسال می‌شود. (نسخه آزمایشی — ایمیل واقعی ارسال نمی‌شود)',
+      message:
+        'اگر این ایمیل در سامانه ثبت شده باشد، لینک بازیابی رمز ارسال می‌شود.',
     }
   }
 
@@ -67,6 +156,8 @@ export function AuthProvider({ children }) {
     currentUser,
     login,
     logout,
+    registerListener,
+    registerArtist,
     requestPasswordReset,
     defaultAvatar: DEFAULT_AVATAR,
   }
