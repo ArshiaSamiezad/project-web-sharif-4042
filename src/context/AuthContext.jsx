@@ -1,6 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as storage from '../lib/storage'
 import { ensureSeedData, DEFAULT_AVATAR } from '../data/seed'
+import {
+  validateArtistSignup,
+  validateListenerSignup,
+  validateLogin,
+  validatePasswordReset,
+} from '../lib/validation'
 
 const AuthContext = createContext(null)
 
@@ -38,6 +44,11 @@ export function AuthProvider({ children }) {
   }
 
   function login(email, password) {
+    const validationError = validateLogin({ email, password })
+    if (validationError) {
+      return { ok: false, error: validationError }
+    }
+
     const users = getUsers()
     const user = users.find(
       (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password,
@@ -57,26 +68,16 @@ export function AuthProvider({ children }) {
   }
 
   function registerListener(data) {
+    const validationError = validateListenerSignup(data)
+    if (validationError) {
+      return { ok: false, error: validationError }
+    }
+
     const users = getUsers()
     const email = data.email.trim().toLowerCase()
 
     if (users.some((u) => u.email.toLowerCase() === email)) {
       return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
-    }
-    if (data.password !== data.confirmPassword) {
-      return { ok: false, error: 'رمز عبور و تأیید آن یکسان نیستند.' }
-    }
-    if (!data.acceptedPrivacy) {
-      return { ok: false, error: 'پذیرش سیاست حریم خصوصی الزامی است.' }
-    }
-    if (!data.displayName.trim()) {
-      return { ok: false, error: 'نام نمایشی را وارد کنید.' }
-    }
-    if (!data.birthDate) {
-      return { ok: false, error: 'تاریخ تولد را وارد کنید.' }
-    }
-    if (!data.gender) {
-      return { ok: false, error: 'جنسیت را انتخاب کنید.' }
     }
 
     const user = {
@@ -100,20 +101,16 @@ export function AuthProvider({ children }) {
   }
 
   function registerArtist(data) {
+    const validationError = validateArtistSignup(data)
+    if (validationError) {
+      return { ok: false, error: validationError }
+    }
+
     const users = getUsers()
     const email = data.email.trim().toLowerCase()
 
     if (users.some((u) => u.email.toLowerCase() === email)) {
       return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
-    }
-    if (data.password !== data.confirmPassword) {
-      return { ok: false, error: 'رمز عبور و تأیید آن یکسان نیستند.' }
-    }
-    if (!data.artistName.trim()) {
-      return { ok: false, error: 'نام هنری را وارد کنید.' }
-    }
-    if (!data.samples?.length) {
-      return { ok: false, error: 'حداقل یک نمونه کار اضافه کنید.' }
     }
 
     const user = {
@@ -140,10 +137,11 @@ export function AuthProvider({ children }) {
   }
 
   function requestPasswordReset(email) {
-    const trimmed = email.trim().toLowerCase()
-    if (!trimmed) {
-      return { ok: false, error: 'ایمیل را وارد کنید.' }
+    const validationError = validatePasswordReset({ email })
+    if (validationError) {
+      return { ok: false, error: validationError }
     }
+
     return {
       ok: true,
       message:
