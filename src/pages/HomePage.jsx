@@ -1,6 +1,14 @@
 import { useAuth } from '../context/AuthContext'
 import './HomePage.css'
 
+function TileRow({ children }) {
+  return (
+    <div className="home__scroller">
+      <div className="home__track">{children}</div>
+    </div>
+  )
+}
+
 export default function HomePage() {
   const { currentUser, getCatalog } = useAuth()
   const catalog = getCatalog()
@@ -28,19 +36,19 @@ export default function HomePage() {
     <div className="home">
       <section className="home__section">
         <h2>آخرین پلی‌لیست‌های شنیده‌شده</h2>
-        <div className="home__row">
+        <TileRow>
           {recentPlaylists.map((item) => (
             <article key={item.id} className="home__tile">
               <img src={item.cover} alt="" />
               <h3>{item.title}</h3>
             </article>
           ))}
-        </div>
+        </TileRow>
       </section>
 
       <section className="home__section">
         <h2>آخرین آلبوم‌های منتشرشده</h2>
-        <div className="home__row">
+        <TileRow>
           {latestAlbums.map((item) => (
             <article key={item.id} className="home__tile">
               <img src={item.cover} alt="" />
@@ -48,12 +56,12 @@ export default function HomePage() {
               <p>{item.artistName}</p>
             </article>
           ))}
-        </div>
+        </TileRow>
       </section>
 
       <section className="home__section">
         <h2>آهنگ‌های پرشنونده</h2>
-        <div className="home__row">
+        <TileRow>
           {popularTracks.map((item) => (
             <article key={item.id} className="home__tile">
               <img src={item.cover} alt="" />
@@ -61,13 +69,13 @@ export default function HomePage() {
               <p>{item.artistName}</p>
             </article>
           ))}
-        </div>
+        </TileRow>
       </section>
 
       {isGold ? (
         <section className="home__section home__section--early">
           <h2>دسترسی زودهنگام</h2>
-          <div className="home__row">
+          <TileRow>
             {earlyAccessItems.map((item) => (
               <article key={item.id} className="home__tile">
                 <img src={item.cover} alt="" />
@@ -75,7 +83,7 @@ export default function HomePage() {
                 <p>{item.artistName}</p>
               </article>
             ))}
-          </div>
+          </TileRow>
         </section>
       ) : null}
     </div>

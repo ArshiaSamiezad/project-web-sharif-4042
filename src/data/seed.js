@@ -8,25 +8,12 @@ export const DEFAULT_AVATAR =
     </svg>`,
   )
 
-function cover(hue, label) {
-  return (
-    'data:image/svg+xml,' +
-    encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-        <defs>
-          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="hsl(${hue} 35% 28%)"/>
-            <stop offset="100%" stop-color="hsl(${hue + 40} 40% 18%)"/>
-          </linearGradient>
-        </defs>
-        <rect width="200" height="200" fill="url(#g)"/>
-        <text x="100" y="108" text-anchor="middle" fill="#f5df4d" font-size="22" font-family="sans-serif">${label}</text>
-      </svg>`,
-    )
-  )
+function cover(id) {
+  // Stable photo per id (picsum seed) — square album-style art.
+  return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 2
+const SEED_VERSION = 3
 
 const SEED_USERS = [
   {
@@ -108,25 +95,25 @@ const SEED_PLAYLISTS = [
     id: 'pl-1',
     title: 'شب‌های بارانی',
     ownerId: 'u-listener',
-    cover: cover(210, 'PL'),
+    cover: cover('pl-1'),
   },
   {
     id: 'pl-2',
     title: 'تمرکز عمیق',
     ownerId: 'u-gold',
-    cover: cover(160, 'PL'),
+    cover: cover('pl-2'),
   },
   {
     id: 'pl-3',
     title: 'خالص الکترونیک',
     ownerId: 'u-listener',
-    cover: cover(280, 'PL'),
+    cover: cover('pl-3'),
   },
   {
     id: 'pl-4',
     title: 'جاده‌های باز',
     ownerId: 'u-gold',
-    cover: cover(35, 'PL'),
+    cover: cover('pl-4'),
   },
 ]
 
@@ -136,7 +123,7 @@ const SEED_ALBUMS = [
     title: 'اقیانوس بی‌صدا',
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
-    cover: cover(200, 'AL'),
+    cover: cover('al-1'),
     releasedAt: '2026-06-01',
     earlyAccess: false,
   },
@@ -145,7 +132,7 @@ const SEED_ALBUMS = [
     title: 'پژواک شهری',
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
-    cover: cover(320, 'AL'),
+    cover: cover('al-2'),
     releasedAt: '2026-06-20',
     earlyAccess: false,
   },
@@ -154,7 +141,7 @@ const SEED_ALBUMS = [
     title: 'طلوع زرد',
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
-    cover: cover(50, 'AL'),
+    cover: cover('al-3'),
     releasedAt: '2026-07-10',
     earlyAccess: true,
   },
@@ -163,7 +150,7 @@ const SEED_ALBUMS = [
     title: 'نیمه‌شب خاکستری',
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
-    cover: cover(0, 'AL'),
+    cover: cover('al-4'),
     releasedAt: '2026-07-12',
     earlyAccess: true,
   },
@@ -176,7 +163,7 @@ const SEED_TRACKS = [
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
     albumId: 'al-1',
-    cover: cover(190, 'TR'),
+    cover: cover('tr-1'),
     plays: 18240,
     earlyAccess: false,
   },
@@ -186,7 +173,7 @@ const SEED_TRACKS = [
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
     albumId: 'al-2',
-    cover: cover(300, 'TR'),
+    cover: cover('tr-2'),
     plays: 22100,
     earlyAccess: false,
   },
@@ -196,7 +183,7 @@ const SEED_TRACKS = [
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
     albumId: 'al-1',
-    cover: cover(145, 'TR'),
+    cover: cover('tr-3'),
     plays: 15680,
     earlyAccess: false,
   },
@@ -206,7 +193,7 @@ const SEED_TRACKS = [
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
     albumId: 'al-3',
-    cover: cover(48, 'TR'),
+    cover: cover('tr-4'),
     plays: 980,
     earlyAccess: true,
   },
@@ -216,7 +203,7 @@ const SEED_TRACKS = [
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
     albumId: 'al-4',
-    cover: cover(10, 'TR'),
+    cover: cover('tr-5'),
     plays: 640,
     earlyAccess: true,
   },
@@ -226,7 +213,7 @@ const SEED_TRACKS = [
     artistId: 'u-artist',
     artistName: 'هنرمند نمونه',
     albumId: null,
-    cover: cover(220, 'TR'),
+    cover: cover('tr-6'),
     plays: 30120,
     earlyAccess: false,
   },
