@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import PageTransition from '../components/PageTransition'
 import './AppShell.css'
 
 const NAV = [
@@ -65,7 +66,7 @@ export default function AppShell() {
           </div>
         </header>
         <div className="shell__page">
-          <Outlet />
+          <PageTransition />
         </div>
       </div>
     </div>

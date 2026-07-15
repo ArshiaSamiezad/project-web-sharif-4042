@@ -146,8 +146,7 @@
   scrollbar-color: var(--color-ultimate-grey) transparent;
 }
 
-.shell__page > * {
-  transform: scaleX(-1);
+.shell__page > .page-transition {
   width: 100%;
   max-width: 100%;
 }
