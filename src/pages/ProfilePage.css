@@ -236,28 +236,161 @@
 
 .profile__release {
   min-width: 0;
+  transition: transform 0.22s ease;
+  will-change: transform;
 }
 
-.profile__release img {
+.profile__release:hover,
+.profile__release.is-playing {
+  transform: translateY(-0.45rem);
+}
+
+.profile__release-cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 0.45rem;
+  overflow: hidden;
+  margin-bottom: 0.45rem;
+}
+
+.profile__release-cover img {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
   border-radius: 0.45rem;
   border: 1px solid var(--color-stroke);
   display: block;
-  margin-bottom: 0.45rem;
+  transition:
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    filter 0.22s ease;
 }
 
-.profile__release h3 {
+.profile__release:hover .profile__release-cover img,
+.profile__release.is-playing .profile__release-cover img {
+  border-color: color-mix(in srgb, var(--color-illuminating) 65%, var(--color-stroke));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-illuminating) 40%, transparent),
+    0 14px 28px rgba(0, 0, 0, 0.4);
+  filter: brightness(1.08) saturate(1.06);
+}
+
+.profile__release-title {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1.4;
+  color: var(--color-text);
+  text-align: start;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.22s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile__release:hover .profile__release-title,
+.profile__release.is-playing .profile__release-title {
+  color: var(--color-illuminating);
 }
 
 .profile__release p {
   margin-top: 0.15rem;
   font-size: 0.78rem;
   color: var(--color-text-muted);
+}
+
+.profile__playing,
+.profile__play-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  background: color-mix(in srgb, var(--color-bg-deep) 48%, transparent);
+  color: var(--color-illuminating);
+  font-size: 0.72rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.profile__play-hint {
+  opacity: 0;
+  font-size: 1.35rem;
+  transition: opacity 0.2s ease;
+}
+
+.profile__release:hover .profile__play-hint {
+  opacity: 1;
+}
+
+.profile__release.is-playing .profile__play-hint {
+  display: none;
+}
+
+.playing-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.18rem;
+  height: 1rem;
+}
+
+.playing-bars i {
+  display: block;
+  width: 0.22rem;
+  height: 0.35rem;
+  border-radius: 999px;
+  background: var(--color-illuminating);
+  animation: playing-bounce 0.85s ease-in-out infinite;
+}
+
+.playing-bars i:nth-child(2) {
+  animation-delay: 0.15s;
+  height: 0.7rem;
+}
+
+.playing-bars i:nth-child(3) {
+  animation-delay: 0.3s;
+  height: 0.45rem;
+}
+
+@keyframes playing-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@media (hover: none) {
+  .profile__release:hover {
+    transform: none;
+  }
+
+  .profile__release.is-playing,
+  .profile__release:active {
+    transform: translateY(-0.3rem);
+  }
+
+  .profile__play-hint {
+    opacity: 0.85;
+  }
 }
 
 .profile__stats--nested {

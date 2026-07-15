@@ -126,13 +126,19 @@ export default function CatalogPage() {
                     >
                       {item.title}
                     </button>
-                    <Link
-                      to={artistProfilePath(item.artistId)}
-                      className="catalog-card__meta"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {item.artistName}
-                    </Link>
+                    <p className="catalog-card__meta-row">
+                      <span className="catalog-card__kind">آلبوم</span>
+                      <span className="catalog-card__kind-sep" aria-hidden="true">
+                        •
+                      </span>
+                      <Link
+                        to={artistProfilePath(item.artistId)}
+                        className="catalog-card__meta"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {item.artistName}
+                      </Link>
+                    </p>
                     <p className="catalog-card__stat">
                       {(item.listeners || 0).toLocaleString('fa-IR')} شنونده
                     </p>
@@ -182,9 +188,15 @@ export default function CatalogPage() {
                   >
                     {item.title}
                   </button>
-                  <Link to={artistProfilePath(item.artistId)} className="catalog-card__meta">
-                    {item.artistName}
-                  </Link>
+                  <p className="catalog-card__meta-row">
+                    <span className="catalog-card__kind">تک‌آهنگ</span>
+                    <span className="catalog-card__kind-sep" aria-hidden="true">
+                      •
+                    </span>
+                    <Link to={artistProfilePath(item.artistId)} className="catalog-card__meta">
+                      {item.artistName}
+                    </Link>
+                  </p>
                   {album ? (
                     <Link to={`/album/${album.id}`} className="catalog-card__album">
                       {album.title}

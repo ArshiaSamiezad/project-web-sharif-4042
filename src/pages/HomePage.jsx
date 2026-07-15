@@ -88,13 +88,19 @@ export default function HomePage() {
               >
                 {item.title}
               </button>
-              <Link
-                to={artistPath(item.artistId)}
-                className="home__tile-meta"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {item.artistName}
-              </Link>
+              <p className="home__tile-meta-row">
+                <span className="home__kind">آلبوم</span>
+                <span className="home__kind-sep" aria-hidden="true">
+                  •
+                </span>
+                <Link
+                  to={artistPath(item.artistId)}
+                  className="home__tile-meta"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {item.artistName}
+                </Link>
+              </p>
             </article>
           ))}
         </TileRow>
@@ -135,9 +141,15 @@ export default function HomePage() {
                 >
                   {item.title}
                 </button>
-                <Link to={artistPath(item.artistId)} className="home__tile-meta">
-                  {item.artistName}
-                </Link>
+                <p className="home__tile-meta-row">
+                  <span className="home__kind">تک‌آهنگ</span>
+                  <span className="home__kind-sep" aria-hidden="true">
+                    •
+                  </span>
+                  <Link to={artistPath(item.artistId)} className="home__tile-meta">
+                    {item.artistName}
+                  </Link>
+                </p>
               </article>
             )
           })}
@@ -167,9 +179,15 @@ export default function HomePage() {
                     >
                       {item.title}
                     </button>
-                    <Link to={artistPath(item.artistId)} className="home__tile-meta">
-                      {item.artistName}
-                    </Link>
+                    <p className="home__tile-meta-row">
+                      <span className="home__kind">آلبوم</span>
+                      <span className="home__kind-sep" aria-hidden="true">
+                        •
+                      </span>
+                      <Link to={artistPath(item.artistId)} className="home__tile-meta">
+                        {item.artistName}
+                      </Link>
+                    </p>
                   </article>
                 )
               }
@@ -205,9 +223,15 @@ export default function HomePage() {
                   >
                     {item.title}
                   </button>
-                  <Link to={artistPath(item.artistId)} className="home__tile-meta">
-                    {item.artistName}
-                  </Link>
+                  <p className="home__tile-meta-row">
+                    <span className="home__kind">تک‌آهنگ</span>
+                    <span className="home__kind-sep" aria-hidden="true">
+                      •
+                    </span>
+                    <Link to={artistPath(item.artistId)} className="home__tile-meta">
+                      {item.artistName}
+                    </Link>
+                  </p>
                 </article>
               )
             })}

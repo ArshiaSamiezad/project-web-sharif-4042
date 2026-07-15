@@ -187,6 +187,29 @@
   white-space: nowrap;
 }
 
+.catalog-card__meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.catalog-card__meta-row .catalog-card__meta {
+  min-width: 0;
+}
+
+.catalog-card__kind,
+.catalog-card__kind-sep {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-ultimate-grey);
+}
+
+.catalog-card__kind-sep {
+  font-weight: 400;
+}
+
 .catalog-card__meta:hover,
 .catalog-card__album:hover {
   color: var(--color-text);

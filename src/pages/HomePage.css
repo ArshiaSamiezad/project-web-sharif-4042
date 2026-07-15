@@ -137,6 +137,31 @@
   white-space: nowrap;
 }
 
+.home__tile-meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  min-width: 0;
+}
+
+.home__tile-meta-row .home__tile-meta {
+  margin-top: 0;
+  min-width: 0;
+}
+
+.home__kind,
+.home__kind-sep {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-ultimate-grey);
+}
+
+.home__kind-sep {
+  font-weight: 400;
+}
+
 .home__tile-meta:hover {
   color: var(--color-text);
   text-decoration: underline;

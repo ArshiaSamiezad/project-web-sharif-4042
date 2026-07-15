@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { usePlaying } from '../context/PlayingContext'
+import PlayingBars from '../components/PlayingBars'
 import './ProfilePage.css'
 
 const GENDER_LABELS = {
@@ -38,6 +40,7 @@ export default function ProfilePage() {
     getCatalog,
     defaultAvatar,
   } = useAuth()
+  const { playingTrackId, playTrack } = usePlaying()
 
   const profile = usernameParam ? getUserByUsername(usernameParam) : currentUser
   const isOwn = Boolean(profile && profile.id === currentUser.id)
@@ -76,10 +79,17 @@ export default function ProfilePage() {
   const viewerIsGold = currentUser.subscription === 'gold'
   const catalog = getCatalog()
   const artistAlbums = isArtist
-    ? catalog.albums.filter((a) => a.artistId === liveProfile.id)
+    ? catalog.albums.filter(
+        (a) => a.artistId === liveProfile.id && (viewerIsGold || !a.earlyAccess),
+      )
     : []
   const artistSingles = isArtist
-    ? catalog.tracks.filter((t) => t.artistId === liveProfile.id && !t.albumId)
+    ? catalog.tracks.filter(
+        (t) =>
+          t.artistId === liveProfile.id &&
+          !t.albumId &&
+          (viewerIsGold || !t.earlyAccess),
+      )
     : []
   const artistTracks = isArtist
     ? catalog.tracks.filter((t) => t.artistId === liveProfile.id)
@@ -383,9 +393,22 @@ export default function ProfilePage() {
               <div className="profile__releases">
                 {artistAlbums.map((album) => (
                   <article key={album.id} className="profile__release">
-                    <img src={album.cover} alt="" />
-                    <h3>{album.title}</h3>
-                    <p dir="ltr">{album.releasedAt}</p>
+                    <button
+                      type="button"
+                      className="profile__release-cover"
+                      onClick={() => navigate(`/album/${album.id}`)}
+                      aria-label={`باز کردن آلبوم ${album.title}`}
+                    >
+                      <img src={album.cover} alt="" />
+                    </button>
+                    <button
+                      type="button"
+                      className="profile__release-title"
+                      onClick={() => navigate(`/album/${album.id}`)}
+                    >
+                      {album.title}
+                    </button>
+                    <p>{(album.listeners || 0).toLocaleString('fa-IR')} شنونده</p>
                   </article>
                 ))}
               </div>
@@ -400,13 +423,42 @@ export default function ProfilePage() {
               <p className="profile__hint">هنوز تک‌آهنگی منتشر نشده است.</p>
             ) : (
               <div className="profile__releases">
-                {artistSingles.map((track) => (
-                  <article key={track.id} className="profile__release">
-                    <img src={track.cover} alt="" />
-                    <h3>{track.title}</h3>
-                    <p>{track.plays.toLocaleString('fa-IR')} پخش</p>
-                  </article>
-                ))}
+                {artistSingles.map((track) => {
+                  const isPlaying = playingTrackId === track.id
+                  return (
+                    <article
+                      key={track.id}
+                      className={`profile__release${isPlaying ? ' is-playing' : ''}`}
+                    >
+                      <button
+                        type="button"
+                        className="profile__release-cover"
+                        onClick={() => playTrack(track.id)}
+                        aria-label={isPlaying ? `توقف ${track.title}` : `پخش ${track.title}`}
+                      >
+                        <img src={track.cover} alt="" />
+                        {isPlaying ? (
+                          <span className="profile__playing">
+                            <PlayingBars />
+                            <span>در حال پخش</span>
+                          </span>
+                        ) : (
+                          <span className="profile__play-hint" aria-hidden="true">
+                            ▶
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="profile__release-title"
+                        onClick={() => playTrack(track.id)}
+                      >
+                        {track.title}
+                      </button>
+                      <p>{(track.listeners || track.plays || 0).toLocaleString('fa-IR')} شنونده</p>
+                    </article>
+                  )
+                })}
               </div>
             )}
           </section>
