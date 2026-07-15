@@ -245,6 +245,83 @@ export function AuthProvider({ children }) {
     return PLAYLIST_LIMITS[user.subscription] ?? PLAYLIST_LIMITS.basic
   }
 
+  function createPlaylist(title) {
+    if (!currentUser) {
+      return { ok: false, error: 'برای ساخت پلی‌لیست وارد شوید.' }
+    }
+
+    const name = String(title ?? '').trim()
+    if (!name) {
+      return { ok: false, error: 'نام پلی‌لیست را وارد کنید.' }
+    }
+
+    const owned = getOwnedPlaylists(currentUser.id)
+    const limit = getPlaylistLimit(currentUser)
+    if (Number.isFinite(limit) && owned.length >= limit) {
+      return {
+        ok: false,
+        error: `سقف اشتراک شما ${limit.toLocaleString('fa-IR')} پلی‌لیست است.`,
+      }
+    }
+
+    const id = `pl-${Date.now()}`
+    const playlist = {
+      id,
+      title: name,
+      ownerId: currentUser.id,
+      cover: `https://picsum.photos/seed/sepatify-${id}/400/400`,
+      trackIds: [],
+    }
+
+    const playlists = storage.getItem('playlists', [])
+    storage.setItem('playlists', [playlist, ...playlists])
+    bumpCatalog()
+    return { ok: true, playlist }
+  }
+
+  function renamePlaylist(playlistId, title) {
+    if (!currentUser) {
+      return { ok: false, error: 'برای ویرایش پلی‌لیست وارد شوید.' }
+    }
+
+    const name = String(title ?? '').trim()
+    if (!name) {
+      return { ok: false, error: 'نام پلی‌لیست را وارد کنید.' }
+    }
+
+    const playlists = storage.getItem('playlists', [])
+    const playlist = playlists.find((p) => p.id === playlistId)
+    if (!playlist || playlist.ownerId !== currentUser.id) {
+      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    }
+
+    const next = playlists.map((p) =>
+      p.id === playlistId ? { ...p, title: name } : p,
+    )
+    storage.setItem('playlists', next)
+    bumpCatalog()
+    return { ok: true, playlist: next.find((p) => p.id === playlistId) }
+  }
+
+  function deletePlaylist(playlistId) {
+    if (!currentUser) {
+      return { ok: false, error: 'برای حذف پلی‌لیست وارد شوید.' }
+    }
+
+    const playlists = storage.getItem('playlists', [])
+    const playlist = playlists.find((p) => p.id === playlistId)
+    if (!playlist || playlist.ownerId !== currentUser.id) {
+      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    }
+
+    storage.setItem(
+      'playlists',
+      playlists.filter((p) => p.id !== playlistId),
+    )
+    bumpCatalog()
+    return { ok: true }
+  }
+
   function toggleTrackInPlaylist(playlistId, trackId) {
     if (!currentUser) {
       return { ok: false, error: 'برای مدیریت پلی‌لیست وارد شوید.' }
@@ -327,6 +404,9 @@ export function AuthProvider({ children }) {
     getCatalog,
     getOwnedPlaylists,
     getPlaylistLimit,
+    createPlaylist,
+    renamePlaylist,
+    deletePlaylist,
     toggleTrackInPlaylist,
     toggleAlbumInPlaylist,
     getUserById,

@@ -53,11 +53,11 @@ export default function HomePage() {
               className="home__tile"
               role="link"
               tabIndex={0}
-              onClick={() => navigate('/playlists')}
+              onClick={() => navigate(`/playlist/${item.id}`)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
-                  navigate('/playlists')
+                  navigate(`/playlist/${item.id}`)
                 }
               }}
             >

@@ -8,6 +8,8 @@ import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import HomePage from './pages/HomePage'
 import ProfilePage from './pages/ProfilePage'
+import PlaylistsPage from './pages/PlaylistsPage'
+import PlaylistDetailPage from './pages/PlaylistDetailPage'
 import CatalogPage from './pages/CatalogPage'
 import AlbumPage from './pages/AlbumPage'
 import EmptyPage from './pages/EmptyPage'
@@ -46,7 +48,8 @@ export default function App() {
               }
             >
               <Route path="/home" element={<HomePage />} />
-              <Route path="/playlists" element={<EmptyPage />} />
+              <Route path="/playlists" element={<PlaylistsPage />} />
+              <Route path="/playlist/:playlistId" element={<PlaylistDetailPage />} />
               <Route path="/catalog" element={<CatalogPage />} />
               <Route path="/album/:albumId" element={<AlbumPage />} />
               <Route path="/profile" element={<ProfilePage />} />
