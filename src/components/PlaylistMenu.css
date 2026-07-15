@@ -1,0 +1,105 @@
+.pl-menu {
+  position: relative;
+  z-index: 5;
+}
+
+.pl-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--color-bg-deep) 55%, transparent);
+  color: var(--color-text);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.pl-menu__trigger:hover {
+  border-color: var(--color-stroke);
+  background: color-mix(in srgb, var(--color-bg-deep) 75%, transparent);
+}
+
+.pl-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  inset-inline-end: 0;
+  min-width: 12.5rem;
+  max-width: min(16rem, 80vw);
+  padding: 0.65rem;
+  border: 1px solid var(--color-stroke);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--color-bg-deep) 92%, #2f3032);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+}
+
+.pl-menu__title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 0.45rem;
+}
+
+.pl-menu__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.pl-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.5rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--color-text);
+  text-align: start;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.pl-menu__item:hover {
+  background: var(--color-surface);
+}
+
+.pl-menu__item.is-checked {
+  background: color-mix(in srgb, var(--color-illuminating) 18%, transparent);
+}
+
+.pl-menu__check {
+  width: 1rem;
+  flex-shrink: 0;
+  color: var(--color-illuminating);
+  font-weight: 700;
+}
+
+.pl-menu__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pl-menu__empty,
+.pl-menu__limit,
+.pl-menu__msg {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.pl-menu__msg {
+  color: var(--color-illuminating-soft);
+}

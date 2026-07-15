@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as storage from '../lib/storage'
-import { ensureSeedData, DEFAULT_AVATAR } from '../data/seed'
+import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS } from '../data/seed'
 import {
   validateArtistSignup,
   validateListenerSignup,
@@ -17,6 +17,11 @@ function generateUsername() {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [ready, setReady] = useState(false)
+  const [catalogVersion, setCatalogVersion] = useState(0)
+
+  function bumpCatalog() {
+    setCatalogVersion((n) => n + 1)
+  }
 
   useEffect(() => {
     ensureSeedData(storage)
@@ -217,11 +222,97 @@ export function AuthProvider({ children }) {
   }
 
   function getCatalog() {
+    void catalogVersion
     return {
       users: getUsers(),
       playlists: storage.getItem('playlists', []),
       albums: storage.getItem('albums', []),
       tracks: storage.getItem('tracks', []),
+    }
+  }
+
+  function getOwnedPlaylists(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+    return storage
+      .getItem('playlists', [])
+      .filter((p) => p.ownerId === userId)
+      .map((p) => ({ ...p, trackIds: p.trackIds || [] }))
+  }
+
+  function getPlaylistLimit(user = currentUser) {
+    if (!user) return PLAYLIST_LIMITS.basic
+    return PLAYLIST_LIMITS[user.subscription] ?? PLAYLIST_LIMITS.basic
+  }
+
+  function toggleTrackInPlaylist(playlistId, trackId) {
+    if (!currentUser) {
+      return { ok: false, error: 'برای مدیریت پلی‌لیست وارد شوید.' }
+    }
+
+    const playlists = storage.getItem('playlists', [])
+    const playlist = playlists.find((p) => p.id === playlistId)
+    if (!playlist) {
+      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    }
+    if (playlist.ownerId !== currentUser.id) {
+      return { ok: false, error: 'فقط پلی‌لیست‌های خودتان را می‌توانید ویرایش کنید.' }
+    }
+
+    const trackIds = playlist.trackIds || []
+    const hasTrack = trackIds.includes(trackId)
+    const nextTrackIds = hasTrack
+      ? trackIds.filter((id) => id !== trackId)
+      : [...trackIds, trackId]
+
+    const next = playlists.map((p) =>
+      p.id === playlistId ? { ...p, trackIds: nextTrackIds } : p,
+    )
+    storage.setItem('playlists', next)
+    bumpCatalog()
+    return {
+      ok: true,
+      added: !hasTrack,
+      playlist: next.find((p) => p.id === playlistId),
+    }
+  }
+
+  function toggleAlbumInPlaylist(playlistId, albumId) {
+    const tracks = storage.getItem('tracks', [])
+    const albumTrackIds = tracks
+      .filter((t) => t.albumId === albumId)
+      .map((t) => t.id)
+
+    if (albumTrackIds.length === 0) {
+      return { ok: false, error: 'این آلبوم آهنگی ندارد.' }
+    }
+
+    const playlists = storage.getItem('playlists', [])
+    const playlist = playlists.find((p) => p.id === playlistId)
+    if (!playlist || playlist.ownerId !== currentUser?.id) {
+      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    }
+
+    const trackIds = playlist.trackIds || []
+    const allIn = albumTrackIds.every((id) => trackIds.includes(id))
+
+    let nextTrackIds
+    if (allIn) {
+      nextTrackIds = trackIds.filter((id) => !albumTrackIds.includes(id))
+    } else {
+      const missing = albumTrackIds.filter((id) => !trackIds.includes(id))
+      nextTrackIds = [...trackIds, ...missing]
+    }
+
+    const next = playlists.map((p) =>
+      p.id === playlistId ? { ...p, trackIds: nextTrackIds } : p,
+    )
+    storage.setItem('playlists', next)
+    bumpCatalog()
+    return {
+      ok: true,
+      added: !allIn,
+      playlist: next.find((p) => p.id === playlistId),
     }
   }
 
@@ -234,12 +325,17 @@ export function AuthProvider({ children }) {
     registerArtist,
     requestPasswordReset,
     getCatalog,
+    getOwnedPlaylists,
+    getPlaylistLimit,
+    toggleTrackInPlaylist,
+    toggleAlbumInPlaylist,
     getUserById,
     getUserByUsername,
     isUsernameTaken,
     updateUser,
     toggleFollow,
     defaultAvatar: DEFAULT_AVATAR,
+    playlistLimits: PLAYLIST_LIMITS,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

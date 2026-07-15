@@ -13,7 +13,13 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 5
+const SEED_VERSION = 6
+
+export const PLAYLIST_LIMITS = {
+  basic: 6,
+  silver: 100,
+  gold: Infinity,
+}
 
 const SEED_USERS = [
   {
@@ -123,24 +129,28 @@ const SEED_PLAYLISTS = [
     title: 'شب‌های بارانی',
     ownerId: 'u-listener',
     cover: cover('pl-1'),
+    trackIds: ['tr-1', 'tr-6'],
   },
   {
     id: 'pl-2',
     title: 'تمرکز عمیق',
     ownerId: 'u-gold',
     cover: cover('pl-2'),
+    trackIds: ['tr-2', 'tr-3', 'tr-7'],
   },
   {
     id: 'pl-3',
     title: 'خالص الکترونیک',
     ownerId: 'u-listener',
     cover: cover('pl-3'),
+    trackIds: ['tr-6'],
   },
   {
     id: 'pl-4',
     title: 'جاده‌های باز',
     ownerId: 'u-gold',
     cover: cover('pl-4'),
+    trackIds: ['tr-8', 'tr-1'],
   },
 ]
 
@@ -152,6 +162,7 @@ const SEED_ALBUMS = [
     artistName: 'هنرمند نمونه',
     cover: cover('al-1'),
     releasedAt: '2026-06-01',
+    listeners: 12400,
     earlyAccess: false,
   },
   {
@@ -161,6 +172,7 @@ const SEED_ALBUMS = [
     artistName: 'هنرمند نمونه',
     cover: cover('al-2'),
     releasedAt: '2026-06-20',
+    listeners: 9800,
     earlyAccess: false,
   },
   {
@@ -170,6 +182,7 @@ const SEED_ALBUMS = [
     artistName: 'هنرمند نمونه',
     cover: cover('al-3'),
     releasedAt: '2026-07-10',
+    listeners: 2100,
     earlyAccess: true,
   },
   {
@@ -179,6 +192,7 @@ const SEED_ALBUMS = [
     artistName: 'هنرمند نمونه',
     cover: cover('al-4'),
     releasedAt: '2026-07-12',
+    listeners: 1500,
     earlyAccess: true,
   },
 ]
@@ -192,6 +206,8 @@ const SEED_TRACKS = [
     albumId: 'al-1',
     cover: cover('tr-1'),
     plays: 18240,
+    listeners: 9100,
+    releasedAt: '2026-06-01',
     earlyAccess: false,
   },
   {
@@ -202,6 +218,8 @@ const SEED_TRACKS = [
     albumId: 'al-2',
     cover: cover('tr-2'),
     plays: 22100,
+    listeners: 11200,
+    releasedAt: '2026-06-20',
     earlyAccess: false,
   },
   {
@@ -212,6 +230,8 @@ const SEED_TRACKS = [
     albumId: 'al-1',
     cover: cover('tr-3'),
     plays: 15680,
+    listeners: 7800,
+    releasedAt: '2026-06-01',
     earlyAccess: false,
   },
   {
@@ -222,6 +242,8 @@ const SEED_TRACKS = [
     albumId: 'al-3',
     cover: cover('tr-4'),
     plays: 980,
+    listeners: 620,
+    releasedAt: '2026-07-10',
     earlyAccess: true,
   },
   {
@@ -232,6 +254,8 @@ const SEED_TRACKS = [
     albumId: 'al-4',
     cover: cover('tr-5'),
     plays: 640,
+    listeners: 410,
+    releasedAt: '2026-07-12',
     earlyAccess: true,
   },
   {
@@ -242,6 +266,44 @@ const SEED_TRACKS = [
     albumId: null,
     cover: cover('tr-6'),
     plays: 30120,
+    listeners: 15400,
+    releasedAt: '2026-05-18',
+    earlyAccess: false,
+  },
+  {
+    id: 'tr-7',
+    title: 'نور نئون',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    albumId: null,
+    cover: cover('tr-7'),
+    plays: 12450,
+    listeners: 6200,
+    releasedAt: '2026-04-02',
+    earlyAccess: false,
+  },
+  {
+    id: 'tr-8',
+    title: 'قطار شب',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    albumId: null,
+    cover: cover('tr-8'),
+    plays: 8900,
+    listeners: 4300,
+    releasedAt: '2026-07-01',
+    earlyAccess: false,
+  },
+  {
+    id: 'tr-9',
+    title: 'مه زرد',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    albumId: 'al-2',
+    cover: cover('tr-9'),
+    plays: 7400,
+    listeners: 3600,
+    releasedAt: '2026-06-20',
     earlyAccess: false,
   },
 ]
