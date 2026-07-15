@@ -79,6 +79,12 @@ export default function CatalogPage() {
       <div className="catalog__controls">
         <label className="catalog__search">
           <span className="visually-hidden">جستجو</span>
+          <span className="catalog__search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="M16.2 16.2 20 20" strokeLinecap="round" />
+            </svg>
+          </span>
           <input
             type="search"
             value={query}
@@ -88,13 +94,38 @@ export default function CatalogPage() {
           />
         </label>
 
-        <label className="catalog__sort">
-          <span>مرتب‌سازی</span>
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-            <option value="listeners">تعداد شنونده</option>
-            <option value="date">تاریخ انتشار</option>
-          </select>
-        </label>
+        <div className="catalog__sort" role="group" aria-label="مرتب‌سازی">
+          <span className="catalog__sort-label">مرتب‌سازی</span>
+          <div className="catalog__sort-track">
+            <button
+              type="button"
+              className={`catalog__sort-opt${sortBy === 'listeners' ? ' is-active' : ''}`}
+              aria-pressed={sortBy === 'listeners'}
+              onClick={() => setSortBy('listeners')}
+            >
+              <span className="catalog__sort-opt-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M5 18V10M10 18V6M15 18v-5M20 18V8" strokeLinecap="round" />
+                </svg>
+              </span>
+              تعداد شنونده
+            </button>
+            <button
+              type="button"
+              className={`catalog__sort-opt${sortBy === 'date' ? ' is-active' : ''}`}
+              aria-pressed={sortBy === 'date'}
+              onClick={() => setSortBy('date')}
+            >
+              <span className="catalog__sort-opt-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <rect x="4" y="5" width="16" height="15" rx="2" />
+                  <path d="M8 3v4M16 3v4M4 10h16" strokeLinecap="round" />
+                </svg>
+              </span>
+              تاریخ انتشار
+            </button>
+          </div>
+        </div>
       </div>
 
       {items.length === 0 ? (
