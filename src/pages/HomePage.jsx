@@ -22,7 +22,7 @@ export default function HomePage() {
 
   const recentPlaylists = (currentUser.recentPlaylistIds || [])
     .map((id) => catalog.playlists.find((p) => p.id === id))
-    .filter(Boolean)
+    .filter((p) => p && p.ownerId === currentUser.id)
 
   const latestAlbums = [...catalog.albums]
     .filter((a) => isGold || !a.earlyAccess)

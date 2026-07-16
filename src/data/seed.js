@@ -13,7 +13,7 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 6
+const SEED_VERSION = 7
 
 export const PLAYLIST_LIMITS = {
   basic: 6,
@@ -36,7 +36,7 @@ const SEED_USERS = [
     followers: ['u-gold'],
     following: ['u-gold', 'u-artist'],
     dailyStreams: 12,
-    recentPlaylistIds: ['pl-1', 'pl-2', 'pl-3'],
+    recentPlaylistIds: ['pl-1', 'pl-3'],
   },
   {
     id: 'u-gold',
@@ -52,7 +52,7 @@ const SEED_USERS = [
     followers: ['u-listener', 'u-silver'],
     following: ['u-artist'],
     dailyStreams: 40,
-    recentPlaylistIds: ['pl-2', 'pl-1', 'pl-4'],
+    recentPlaylistIds: ['pl-2', 'pl-4'],
   },
   {
     id: 'u-silver',
@@ -68,7 +68,7 @@ const SEED_USERS = [
     followers: [],
     following: ['u-gold'],
     dailyStreams: 18,
-    recentPlaylistIds: ['pl-1'],
+    recentPlaylistIds: [],
   },
   {
     id: 'u-artist',

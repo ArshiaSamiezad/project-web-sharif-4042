@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
 import PlayingBars from '../components/PlayingBars'
+import AddTracksModal from '../components/AddTracksModal'
 import './PlaylistsPage.css'
 import './CatalogPages.css'
 
@@ -23,14 +24,14 @@ export default function PlaylistDetailPage() {
   const [renameTitle, setRenameTitle] = useState('')
   const [renameError, setRenameError] = useState('')
   const [actionError, setActionError] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
 
   const catalog = getCatalog()
   const playlist = catalog.playlists.find((item) => item.id === playlistId)
-  if (!playlist) {
+  if (!playlist || playlist.ownerId !== currentUser?.id) {
     return <Navigate to="/playlists" replace />
   }
 
-  const isOwner = playlist.ownerId === currentUser?.id
   const tracks = (playlist.trackIds || [])
     .map((id) => catalog.tracks.find((t) => t.id === id))
     .filter(Boolean)
@@ -77,7 +78,7 @@ export default function PlaylistDetailPage() {
         <img src={playlist.cover} alt="" className="album-page__cover" />
         <div className="album-page__info">
           <p className="album-page__eyebrow">پلی‌لیست</p>
-          {renaming && isOwner ? (
+          {renaming ? (
             <form className="playlists__rename" onSubmit={handleRename} noValidate>
               <input
                 value={renameTitle}
@@ -110,37 +111,33 @@ export default function PlaylistDetailPage() {
             <span>{tracks.length.toLocaleString('fa-IR')} آهنگ</span>
           </p>
           <div className="playlist-detail__actions">
-            {isOwner ? (
-              <>
-                <button
-                  type="button"
-                  className="playlists__btn playlists__btn--accent"
-                  onClick={() => navigate('/catalog')}
-                >
-                  افزودن آهنگ
-                </button>
-                {!renaming ? (
-                  <button
-                    type="button"
-                    className="playlists__btn"
-                    onClick={() => {
-                      setRenameTitle(playlist.title)
-                      setRenaming(true)
-                      setRenameError('')
-                    }}
-                  >
-                    تغییر نام
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="playlists__btn playlists__btn--danger"
-                  onClick={handleDelete}
-                >
-                  حذف
-                </button>
-              </>
+            <button
+              type="button"
+              className="playlists__btn playlists__btn--accent"
+              onClick={() => setAddOpen(true)}
+            >
+              افزودن آهنگ
+            </button>
+            {!renaming ? (
+              <button
+                type="button"
+                className="playlists__btn"
+                onClick={() => {
+                  setRenameTitle(playlist.title)
+                  setRenaming(true)
+                  setRenameError('')
+                }}
+              >
+                تغییر نام
+              </button>
             ) : null}
+            <button
+              type="button"
+              className="playlists__btn playlists__btn--danger"
+              onClick={handleDelete}
+            >
+              حذف
+            </button>
           </div>
           {actionError ? <p className="playlists__error">{actionError}</p> : null}
         </div>
@@ -149,15 +146,13 @@ export default function PlaylistDetailPage() {
       {tracks.length === 0 ? (
         <div className="playlist-detail__empty">
           <p>هنوز آهنگی در این لیست نیست.</p>
-          {isOwner ? (
-            <button
-              type="button"
-              className="playlists__btn playlists__btn--primary"
-              onClick={() => navigate('/catalog')}
-            >
-              رفتن به آرشیو آلبوم‌ها و تک‌آهنگ‌ها
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="playlists__btn playlists__btn--primary"
+            onClick={() => setAddOpen(true)}
+          >
+            افزودن آهنگ
+          </button>
         </div>
       ) : (
         <ul className="album-page__tracks">
@@ -204,21 +199,25 @@ export default function PlaylistDetailPage() {
                 {isPlaying ? (
                   <span className="album-track__badge">در حال پخش</span>
                 ) : null}
-                {isOwner ? (
-                  <button
-                    type="button"
-                    className="playlists__btn playlists__btn--ghost"
-                    onClick={() => handleRemoveTrack(track.id)}
-                    title="حذف از پلی‌لیست"
-                  >
-                    حذف
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="playlists__btn playlists__btn--ghost"
+                  onClick={() => handleRemoveTrack(track.id)}
+                  title="حذف از پلی‌لیست"
+                >
+                  حذف
+                </button>
               </li>
             )
           })}
         </ul>
       )}
+
+      <AddTracksModal
+        open={addOpen}
+        playlistId={playlist.id}
+        onClose={() => setAddOpen(false)}
+      />
     </div>
   )
 }
