@@ -10,6 +10,27 @@ import {
 
 const AuthContext = createContext(null)
 
+export const DEFAULT_USER_SETTINGS = {
+  notifications: 'all',
+  volume: 80,
+  language: 'fa',
+}
+
+export function getUserSettings(user) {
+  return {
+    ...DEFAULT_USER_SETTINGS,
+    ...(user?.settings || {}),
+  }
+}
+
+export function applyDocumentLanguage(language) {
+  const lang = language === 'en' ? 'en' : 'fa'
+  const dir = lang === 'en' ? 'ltr' : 'rtl'
+  document.documentElement.lang = lang
+  document.documentElement.dir = dir
+  document.body.dir = dir
+}
+
 function generateUsername() {
   return `user_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -30,6 +51,7 @@ export function AuthProvider({ children }) {
       const users = storage.getItem('users', [])
       const found = users.find((u) => u.id === sessionId) || null
       setCurrentUser(found)
+      if (found) applyDocumentLanguage(getUserSettings(found).language)
     }
     setReady(true)
   }, [])
@@ -65,10 +87,12 @@ export function AuthProvider({ children }) {
       return { ok: false, error: 'حساب هنرمند شما در وضعیت «در انتظار تأیید» است.' }
     }
     setSession(user)
+    applyDocumentLanguage(getUserSettings(user).language)
     return { ok: true, user }
   }
 
   function logout() {
+    applyDocumentLanguage('fa')
     setSession(null)
   }
 
@@ -100,6 +124,7 @@ export function AuthProvider({ children }) {
       following: [],
       dailyStreams: 0,
       recentPlaylistIds: [],
+      settings: { ...DEFAULT_USER_SETTINGS },
     }
     persistUsers([...users, user])
     return { ok: true, user }
@@ -137,6 +162,7 @@ export function AuthProvider({ children }) {
       following: [],
       dailyStreams: 0,
       recentPlaylistIds: [],
+      settings: { ...DEFAULT_USER_SETTINGS },
     }
     persistUsers([...users, user])
     return { ok: true, user, pending: true }
@@ -184,11 +210,72 @@ export function AuthProvider({ children }) {
       patch = { ...patch, username: nextName }
     }
 
+    if (patch.settings !== undefined) {
+      const existing = users.find((u) => u.id === userId)
+      patch = {
+        ...patch,
+        settings: {
+          ...DEFAULT_USER_SETTINGS,
+          ...(existing?.settings || {}),
+          ...patch.settings,
+        },
+      }
+    }
+
     const next = users.map((u) => (u.id === userId ? { ...u, ...patch } : u))
     persistUsers(next)
     const updated = next.find((u) => u.id === userId) || null
-    if (currentUser?.id === userId) setCurrentUser(updated)
+    if (currentUser?.id === userId) {
+      setCurrentUser(updated)
+      if (patch.settings?.language) {
+        applyDocumentLanguage(patch.settings.language)
+      }
+    }
     return { ok: true, user: updated }
+  }
+
+  function updateSettings(partial) {
+    if (!currentUser) {
+      return { ok: false, error: 'برای تغییر تنظیمات وارد شوید.' }
+    }
+    return updateUser(currentUser.id, {
+      settings: {
+        ...getUserSettings(currentUser),
+        ...partial,
+      },
+    })
+  }
+
+  function deleteAccount(userId = currentUser?.id) {
+    if (!userId) {
+      return { ok: false, error: 'حساب کاربری پیدا نشد.' }
+    }
+
+    const users = getUsers()
+    if (!users.some((u) => u.id === userId)) {
+      return { ok: false, error: 'حساب کاربری پیدا نشد.' }
+    }
+
+    const nextUsers = users
+      .filter((u) => u.id !== userId)
+      .map((u) => ({
+        ...u,
+        followers: (u.followers || []).filter((id) => id !== userId),
+        following: (u.following || []).filter((id) => id !== userId),
+      }))
+    persistUsers(nextUsers)
+
+    const playlists = storage
+      .getItem('playlists', [])
+      .filter((p) => p.ownerId !== userId)
+    storage.setItem('playlists', playlists)
+
+    if (currentUser?.id === userId) {
+      applyDocumentLanguage('fa')
+      setSession(null)
+    }
+    bumpCatalog()
+    return { ok: true }
   }
 
   function toggleFollow(targetId) {
@@ -413,6 +500,8 @@ export function AuthProvider({ children }) {
     getUserByUsername,
     isUsernameTaken,
     updateUser,
+    updateSettings,
+    deleteAccount,
     toggleFollow,
     defaultAvatar: DEFAULT_AVATAR,
     playlistLimits: PLAYLIST_LIMITS,

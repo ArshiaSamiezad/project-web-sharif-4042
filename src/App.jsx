@@ -12,7 +12,8 @@ import PlaylistsPage from './pages/PlaylistsPage'
 import PlaylistDetailPage from './pages/PlaylistDetailPage'
 import CatalogPage from './pages/CatalogPage'
 import AlbumPage from './pages/AlbumPage'
-import EmptyPage from './pages/EmptyPage'
+import SettingsPage from './pages/SettingsPage'
+import PaymentPage from './pages/PaymentPage'
 
 function AuthLayout({ children }) {
   return <PageTransition variant="auth">{children}</PageTransition>
@@ -54,7 +55,8 @@ export default function App() {
               <Route path="/album/:albumId" element={<AlbumPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/:username" element={<ProfilePage />} />
-              <Route path="/settings" element={<EmptyPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/payment" element={<PaymentPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
