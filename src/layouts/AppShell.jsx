@@ -11,6 +11,12 @@ const NAV = [
   { to: '/playlists', labelKey: 'nav.playlists', shortKey: 'nav.playlistsShort', icon: 'playlists' },
   { to: '/catalog', labelKey: 'nav.catalog', shortKey: 'nav.catalogShort', icon: 'catalog' },
   { to: '/profile', labelKey: 'nav.profile', shortKey: 'nav.profileShort', icon: 'profile' },
+  {
+    to: '/notifications',
+    labelKey: 'nav.notifications',
+    shortKey: 'nav.notificationsShort',
+    icon: 'notifications',
+  },
   { to: '/settings', labelKey: 'nav.settings', shortKey: 'nav.settingsShort', icon: 'settings' },
 ]
 
@@ -57,6 +63,15 @@ function NavIcon({ name }) {
           <path d="M5 19.5c1.6-3.2 4-4.8 7-4.8s5.4 1.6 7 4.8" />
         </svg>
       )
+    case 'notifications':
+      return (
+        <svg {...props}>
+          <path d="M6.5 17.5h11" />
+          <path d="M8 17.5V10a4 4 0 0 1 8 0v7.5" />
+          <path d="M10.2 17.5a1.8 1.8 0 0 0 3.6 0" />
+          <path d="M12 4.2V3.5" />
+        </svg>
+      )
     case 'settings':
       return (
         <svg {...props}>
@@ -89,11 +104,12 @@ function NavIcon({ name }) {
 }
 
 export default function AppShell() {
-  const { currentUser, logout, defaultAvatar } = useAuth()
-  const { t, subscriptionLabel } = useI18n()
+  const { currentUser, logout, defaultAvatar, getUnreadNotificationCount } = useAuth()
+  const { t, subscriptionLabel, formatNumber } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(() => Boolean(getItem('sidebarCollapsed', false)))
+  const unreadCount = getUnreadNotificationCount()
 
   function handleLogout() {
     logout()
@@ -143,6 +159,7 @@ export default function AppShell() {
           {NAV.map((item) => {
             const label = t(item.labelKey)
             const shortLabel = t(item.shortKey)
+            const showBadge = item.to === '/notifications' && unreadCount > 0
             return (
               <NavLink
                 key={item.to}
@@ -151,7 +168,14 @@ export default function AppShell() {
                 className={({ isActive }) => linkClass(item, isActive)}
                 title={label}
               >
-                <NavIcon name={item.icon} />
+                <span className="shell__icon-wrap">
+                  <NavIcon name={item.icon} />
+                  {showBadge ? (
+                    <span className="shell__nav-badge" aria-label={t('notifications.unreadBadge', { count: formatNumber(unreadCount) })}>
+                      {unreadCount > 9 ? '9+' : formatNumber(unreadCount)}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="shell__link-label">
                   <span className="shell__link-label-full">{label}</span>
                   <span className="shell__link-label-short">{shortLabel}</span>

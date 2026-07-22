@@ -13,7 +13,7 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 7
+const SEED_VERSION = 8
 
 export const PLAYLIST_LIMITS = {
   basic: 6,
@@ -308,6 +308,168 @@ const SEED_TRACKS = [
   },
 ]
 
+const SEED_NOTIFICATIONS = [
+  // Listener — subscription + followed artist release
+  {
+    id: 'n-listen-1',
+    userId: 'u-listener',
+    type: 'subscription_expiry',
+    important: true,
+    params: { days: 3, plan: 'basic' },
+    link: '/payment',
+    createdAt: '2026-07-21T09:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-listen-2',
+    userId: 'u-listener',
+    type: 'new_release',
+    important: false,
+    params: { artistName: 'هنرمند نمونه', workTitle: 'طلوع زرد' },
+    link: '/album/al-3',
+    createdAt: '2026-07-20T14:30:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-listen-3',
+    userId: 'u-listener',
+    type: 'new_release',
+    important: false,
+    params: { artistName: 'هنرمند نمونه', workTitle: 'ریتم سرد' },
+    link: '/catalog',
+    createdAt: '2026-07-10T11:00:00.000Z',
+    read: true,
+  },
+  // Gold listener
+  {
+    id: 'n-gold-1',
+    userId: 'u-gold',
+    type: 'new_release',
+    important: false,
+    params: { artistName: 'هنرمند نمونه', workTitle: 'نیمه‌شب خاکستری' },
+    link: '/album/al-4',
+    createdAt: '2026-07-19T16:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-gold-2',
+    userId: 'u-gold',
+    type: 'subscription_expiry',
+    important: true,
+    params: { days: 7, plan: 'gold' },
+    link: '/payment',
+    createdAt: '2026-07-18T08:00:00.000Z',
+    read: true,
+  },
+  // Silver
+  {
+    id: 'n-silver-1',
+    userId: 'u-silver',
+    type: 'subscription_expiry',
+    important: true,
+    params: { days: 2, plan: 'silver' },
+    link: '/payment',
+    createdAt: '2026-07-21T10:00:00.000Z',
+    read: false,
+  },
+  // Artist — approval + monthly finance
+  {
+    id: 'n-artist-1',
+    userId: 'u-artist',
+    type: 'artist_approved',
+    important: true,
+    params: {},
+    link: '/profile',
+    createdAt: '2026-06-01T12:00:00.000Z',
+    read: true,
+  },
+  {
+    id: 'n-artist-2',
+    userId: 'u-artist',
+    type: 'monthly_finance',
+    important: true,
+    params: { year: 2026, month: 6, amount: 12400000 },
+    link: '/profile',
+    createdAt: '2026-07-01T07:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-artist-3',
+    userId: 'u-artist',
+    type: 'artist_rejected',
+    important: true,
+    params: {
+      reasonFa: 'کیفیت نمونه کارها با استاندارد انتشار همخوانی نداشت.',
+      reasonEn: 'Sample quality did not meet the publishing standard.',
+    },
+    link: null,
+    createdAt: '2026-05-15T09:30:00.000Z',
+    read: true,
+  },
+  // Support
+  {
+    id: 'n-support-1',
+    userId: 'u-support',
+    type: 'new_ticket',
+    important: true,
+    params: { ticketId: 'T-1042', userName: 'شنونده نمونه' },
+    link: null,
+    createdAt: '2026-07-21T15:20:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-support-2',
+    userId: 'u-support',
+    type: 'artist_verification',
+    important: true,
+    params: { artistName: 'آوای سپید' },
+    link: null,
+    createdAt: '2026-07-21T13:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-support-3',
+    userId: 'u-support',
+    type: 'new_ticket',
+    important: false,
+    params: { ticketId: 'T-1038', userName: 'کاربر نقره‌ای' },
+    link: null,
+    createdAt: '2026-07-15T10:00:00.000Z',
+    read: true,
+  },
+  // Admin
+  {
+    id: 'n-admin-1',
+    userId: 'u-admin',
+    type: 'artist_verification',
+    important: true,
+    params: { artistName: 'آوای سپید' },
+    link: null,
+    createdAt: '2026-07-21T13:05:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-admin-2',
+    userId: 'u-admin',
+    type: 'new_ticket',
+    important: true,
+    params: { ticketId: 'T-1042', userName: 'شنونده نمونه' },
+    link: null,
+    createdAt: '2026-07-21T15:25:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-admin-3',
+    userId: 'u-admin',
+    type: 'artist_verification',
+    important: true,
+    params: { artistName: 'شب‌گرد' },
+    link: null,
+    createdAt: '2026-07-12T09:00:00.000Z',
+    read: true,
+  },
+]
+
 export function ensureSeedData(storage) {
   const version = storage.getItem('seedVersion', 0)
   if (version >= SEED_VERSION) return
@@ -324,6 +486,7 @@ export function ensureSeedData(storage) {
   storage.setItem('playlists', SEED_PLAYLISTS)
   storage.setItem('albums', SEED_ALBUMS)
   storage.setItem('tracks', SEED_TRACKS)
+  storage.setItem('notifications', SEED_NOTIFICATIONS)
   storage.setItem('seeded', true)
   storage.setItem('seedVersion', SEED_VERSION)
 }

@@ -259,6 +259,11 @@ export function AuthProvider({ children }) {
     if (currentUser?.id === userId) {
       setSession(null)
     }
+
+    const notifications = storage
+      .getItem('notifications', [])
+      .filter((n) => n.userId !== userId)
+    storage.setItem('notifications', notifications)
     bumpCatalog()
     return { ok: true }
   }
@@ -465,6 +470,79 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function getAllNotifications() {
+    void catalogVersion
+    return storage.getItem('notifications', [])
+  }
+
+  function persistNotifications(list) {
+    storage.setItem('notifications', list)
+    bumpCatalog()
+  }
+
+  function getNotifications(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+
+    const preference = getUserSettings(getUserById(userId) || currentUser).notifications
+    if (preference === 'none') return []
+
+    return getAllNotifications()
+      .filter((n) => n.userId === userId)
+      .filter((n) => (preference === 'important' ? n.important : true))
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  }
+
+  function getUnreadNotificationCount(userId = currentUser?.id) {
+    return getNotifications(userId).filter((n) => !n.read).length
+  }
+
+  function markNotificationRead(notificationId) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.userNotFound') }
+    }
+
+    const list = getAllNotifications()
+    const target = list.find((n) => n.id === notificationId && n.userId === currentUser.id)
+    if (!target) {
+      return { ok: false, error: t('notifications.notFound') }
+    }
+
+    persistNotifications(
+      list.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+    )
+    return { ok: true }
+  }
+
+  function markAllNotificationsRead() {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.userNotFound') }
+    }
+
+    const list = getAllNotifications()
+    persistNotifications(
+      list.map((n) =>
+        n.userId === currentUser.id && !n.read ? { ...n, read: true } : n,
+      ),
+    )
+    return { ok: true }
+  }
+
+  function deleteNotification(notificationId) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.userNotFound') }
+    }
+
+    const list = getAllNotifications()
+    const target = list.find((n) => n.id === notificationId && n.userId === currentUser.id)
+    if (!target) {
+      return { ok: false, error: t('notifications.notFound') }
+    }
+
+    persistNotifications(list.filter((n) => n.id !== notificationId))
+    return { ok: true }
+  }
+
   const value = {
     ready,
     currentUser,
@@ -481,6 +559,11 @@ export function AuthProvider({ children }) {
     deletePlaylist,
     toggleTrackInPlaylist,
     toggleAlbumInPlaylist,
+    getNotifications,
+    getUnreadNotificationCount,
+    markNotificationRead,
+    markAllNotificationsRead,
+    deleteNotification,
     getUserById,
     getUserByUsername,
     isUsernameTaken,

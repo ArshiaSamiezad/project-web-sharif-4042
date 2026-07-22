@@ -41,6 +41,8 @@ export const translations = {
       profileShort: 'نمایه',
       settings: 'تنظیمات برنامه',
       settingsShort: 'تنظیمات',
+      notifications: 'اعلان‌ها',
+      notificationsShort: 'اعلان‌ها',
       sidebar: 'ناوبری',
       mainMenu: 'منوی اصلی',
       expand: 'باز کردن منو',
@@ -230,6 +232,52 @@ export const translations = {
         'درگاه پرداخت و تغییر اشتراک جزو نیازمندی‌های فاز دوم است و هنوز فعال نشده است. می‌توانید از صفحه تنظیمات نوع اشتراک فعلی خود را مشاهده کنید.',
       backToSettings: 'بازگشت به تنظیمات',
     },
+    notifications: {
+      title: 'اعلانات',
+      subtitle: 'پیام‌ها و هشدارهای مربوط به حساب شما',
+      markAllRead: 'خواندن همه اعلانات',
+      markRead: 'علامت‌گذاری به‌عنوان خوانده‌شده',
+      delete: 'حذف اعلان',
+      unreadSection: 'خوانده‌نشده',
+      readSection: 'خوانده‌شده',
+      emptyTitle: 'اعلانی وجود ندارد',
+      emptyBody: 'وقتی خبر یا هشدار جدیدی باشد، اینجا نمایش داده می‌شود.',
+      emptyFiltered:
+        'به‌خاطر تنظیم محدودیت اعلان‌ها، موردی برای نمایش نیست. می‌توانید از بخش تنظیمات آن را تغییر دهید.',
+      openLink: 'مشاهده',
+      notFound: 'اعلان پیدا نشد.',
+      unreadBadge: '{count} خوانده‌نشده',
+      types: {
+        subscriptionExpiry: {
+          title: 'هشدار اتمام مهلت اشتراک',
+          body: 'اشتراک شما تا {days} روز دیگر به پایان می‌رسد. برای ادامه امکانات، آن را تمدید یا ارتقا دهید.',
+        },
+        newRelease: {
+          title: 'اثر جدید از هنرمند دنبال‌شده',
+          body: '«{artistName}» اثر جدید «{workTitle}» را منتشر کرده است.',
+        },
+        artistApproved: {
+          title: 'تأیید حساب هنرمند',
+          body: 'حساب هنرمندی شما تأیید شد. اکنون می‌توانید آثار خود را منتشر کنید.',
+        },
+        artistRejected: {
+          title: 'رد حساب هنرمند',
+          body: 'درخواست هنرمندی شما رد شد. علت: {reason}',
+        },
+        monthlyFinance: {
+          title: 'محاسبات مالی ماهانه',
+          body: 'گزارش مالی {month} آماده است. مبلغ تسویه: {amount} تومان.',
+        },
+        newTicket: {
+          title: 'تیکت جدید کاربران',
+          body: 'تیکت {ticketId} از طرف «{userName}» ثبت شده و آماده بررسی است.',
+        },
+        artistVerification: {
+          title: 'درخواست احراز هویت هنرمند',
+          body: 'هنرمند تازه‌ثبت‌نام‌شده «{artistName}» منتظر بررسی احراز هویت است.',
+        },
+      },
+    },
     validation: {
       emailRequired: 'ایمیل را وارد کنید.',
       emailInvalid: 'فرمت ایمیل معتبر نیست.',
@@ -309,6 +357,8 @@ export const translations = {
       profileShort: 'Profile',
       settings: 'Settings',
       settingsShort: 'Settings',
+      notifications: 'Notifications',
+      notificationsShort: 'Alerts',
       sidebar: 'Navigation',
       mainMenu: 'Main menu',
       expand: 'Expand menu',
@@ -497,6 +547,52 @@ export const translations = {
       phase2Hint:
         'Checkout and plan changes are part of phase 2 and are not active yet. You can view your current plan in Settings.',
       backToSettings: 'Back to settings',
+    },
+    notifications: {
+      title: 'Notifications',
+      subtitle: 'Alerts and messages for your account',
+      markAllRead: 'Mark all as read',
+      markRead: 'Mark as read',
+      delete: 'Delete notification',
+      unreadSection: 'Unread',
+      readSection: 'Read',
+      emptyTitle: 'No notifications',
+      emptyBody: 'When there is news or an alert, it will show up here.',
+      emptyFiltered:
+        'Nothing to show with your current notification limits. You can change this in Settings.',
+      openLink: 'Open',
+      notFound: 'Notification not found.',
+      unreadBadge: '{count} unread',
+      types: {
+        subscriptionExpiry: {
+          title: 'Subscription expiring soon',
+          body: 'Your plan ends in {days} days. Renew or upgrade to keep your features.',
+        },
+        newRelease: {
+          title: 'New release from a followed artist',
+          body: '“{artistName}” released “{workTitle}”.',
+        },
+        artistApproved: {
+          title: 'Artist account approved',
+          body: 'Your artist account was approved. You can now publish your work.',
+        },
+        artistRejected: {
+          title: 'Artist account rejected',
+          body: 'Your artist application was rejected. Reason: {reason}',
+        },
+        monthlyFinance: {
+          title: 'Monthly financial report',
+          body: 'The financial report for {month} is ready. Settlement amount: {amount}.',
+        },
+        newTicket: {
+          title: 'New user ticket',
+          body: 'Ticket {ticketId} from “{userName}” is waiting for review.',
+        },
+        artistVerification: {
+          title: 'Artist verification request',
+          body: 'Newly registered artist “{artistName}” is waiting for identity review.',
+        },
+      },
     },
     validation: {
       emailRequired: 'Enter your email.',

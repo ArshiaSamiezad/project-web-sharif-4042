@@ -108,6 +108,34 @@
   display: block;
 }
 
+.shell__icon-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.shell__nav-badge {
+  position: absolute;
+  top: -0.35rem;
+  inset-inline-end: -0.45rem;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.22rem;
+  border-radius: 999px;
+  background: #6ea8ff;
+  color: #0f1724;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1rem;
+  text-align: center;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-bg-deep) 80%, transparent);
+}
+
+.shell__link.is-active .shell__nav-badge {
+  background: var(--color-bg-deep);
+  color: var(--color-illuminating);
+}
+
 .shell__link,
 .shell__logout {
   display: flex;

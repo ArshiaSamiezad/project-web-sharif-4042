@@ -15,6 +15,7 @@ import CatalogPage from './pages/CatalogPage'
 import AlbumPage from './pages/AlbumPage'
 import SettingsPage from './pages/SettingsPage'
 import PaymentPage from './pages/PaymentPage'
+import NotificationsPage from './pages/NotificationsPage'
 
 function AuthLayout({ children }) {
   return <PageTransition variant="auth">{children}</PageTransition>
@@ -57,6 +58,7 @@ export default function App() {
                 <Route path="/album/:albumId" element={<AlbumPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/:username" element={<ProfilePage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/payment" element={<PaymentPage />} />
               </Route>
