@@ -123,6 +123,14 @@
   flex: 1;
   padding: clamp(1rem, 2.5vw, 1.5rem);
   min-width: 0;
+  /* Cancel PageTransition --app scaleX(-1) so RTL text/layout stay correct
+     (same double-flip pattern as AppShell .shell__page). */
+  transform: scaleX(-1);
+}
+
+.staff-shell__page > .page-transition {
+  width: 100%;
+  max-width: 100%;
 }
 
 @media (max-width: 860px) {
