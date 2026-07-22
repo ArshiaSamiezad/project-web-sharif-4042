@@ -280,6 +280,11 @@ export default function ProfilePage() {
           )}
         </div>
         <div className="profile__hero-actions">
+          {isOwn && isVerifiedArtist ? (
+            <Link to="/artist/works" className="profile__btn">
+              {t('profile.manageWorks')}
+            </Link>
+          ) : null}
           {!isOwn ? (
             <button type="button" className="profile__btn" onClick={handleFollow}>
               {isFollowing ? t('profile.unfollow') : t('profile.follow')}

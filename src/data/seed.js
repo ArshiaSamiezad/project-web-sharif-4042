@@ -13,7 +13,7 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 8
+const SEED_VERSION = 9
 
 export const PLAYLIST_LIMITS = {
   basic: 6,
@@ -164,6 +164,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-06-01',
     listeners: 12400,
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['استودیو شب'],
   },
   {
     id: 'al-2',
@@ -174,6 +176,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-06-20',
     listeners: 9800,
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: [],
   },
   {
     id: 'al-3',
@@ -184,6 +188,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-07-10',
     listeners: 2100,
     earlyAccess: true,
+    genre: 'ایندی',
+    collaborators: ['نور زرد'],
   },
   {
     id: 'al-4',
@@ -194,6 +200,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-07-12',
     listeners: 1500,
     earlyAccess: true,
+    genre: 'الکترونیک',
+    collaborators: [],
   },
 ]
 
@@ -209,6 +217,10 @@ const SEED_TRACKS = [
     listeners: 9100,
     releasedAt: '2026-06-01',
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['استودیو شب'],
+    lyrics: 'موج اول از دوردست می‌آید\nساحل خاموش را بیدار می‌کند',
+    audio: { name: 'moj-aval.flac', size: 28400000, type: 'audio/flac' },
   },
   {
     id: 'tr-2',
@@ -221,6 +233,10 @@ const SEED_TRACKS = [
     listeners: 11200,
     releasedAt: '2026-06-20',
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: [],
+    lyrics: 'پنجره نور را باز کن\nشهر هنوز خواب است',
+    audio: { name: 'panjere-noor.wav', size: 41200000, type: 'audio/wav' },
   },
   {
     id: 'tr-3',
@@ -233,6 +249,10 @@ const SEED_TRACKS = [
     listeners: 7800,
     releasedAt: '2026-06-01',
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['استودیو شب'],
+    lyrics: 'گام‌های آهسته روی سنگفرش خیس\nپژواک شب در کوچه می‌پیچد',
+    audio: { name: 'gamaha.mp3', size: 8200000, type: 'audio/mpeg' },
   },
   {
     id: 'tr-4',
@@ -245,6 +265,10 @@ const SEED_TRACKS = [
     listeners: 620,
     releasedAt: '2026-07-10',
     earlyAccess: true,
+    genre: 'ایندی',
+    collaborators: ['نور زرد'],
+    lyrics: 'پیش‌نمایش طلایی پیش از طلوع\nفقط برای شنوندگان طلایی',
+    audio: { name: 'preview-gold.mp3', size: 6400000, type: 'audio/mpeg' },
   },
   {
     id: 'tr-5',
@@ -257,6 +281,10 @@ const SEED_TRACKS = [
     listeners: 410,
     releasedAt: '2026-07-12',
     earlyAccess: true,
+    genre: 'الکترونیک',
+    collaborators: [],
+    lyrics: 'انحصاری سپتیفای\nدر نیمه‌شب خاکستری',
+    audio: { name: 'exclusive.flac', size: 30100000, type: 'audio/flac' },
   },
   {
     id: 'tr-6',
@@ -269,6 +297,10 @@ const SEED_TRACKS = [
     listeners: 15400,
     releasedAt: '2026-05-18',
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['دی‌جی یخ'],
+    lyrics: 'ریتم سرد روی پوست شهر\nنبض مترو و نور نئون',
+    audio: { name: 'rhythm-sard.wav', size: 38800000, type: 'audio/wav' },
   },
   {
     id: 'tr-7',
@@ -281,6 +313,10 @@ const SEED_TRACKS = [
     listeners: 6200,
     releasedAt: '2026-04-02',
     earlyAccess: false,
+    genre: 'سینث‌ویو',
+    collaborators: [],
+    lyrics: 'نور نئون در مه زرد\nسایه ما روی دیوار می‌رقصد',
+    audio: { name: 'neon-light.mp3', size: 9100000, type: 'audio/mpeg' },
   },
   {
     id: 'tr-8',
@@ -293,6 +329,10 @@ const SEED_TRACKS = [
     listeners: 4300,
     releasedAt: '2026-07-01',
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: ['راه‌آهن صدا'],
+    lyrics: 'قطار شب از ایستگاه می‌گذرد\nچمدان‌های خالی، پنجره‌های مه گرفته',
+    audio: { name: 'train-night.flac', size: 26500000, type: 'audio/flac' },
   },
   {
     id: 'tr-9',
@@ -305,6 +345,10 @@ const SEED_TRACKS = [
     listeners: 3600,
     releasedAt: '2026-06-20',
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: [],
+    lyrics: 'مه زرد روی بام‌ها نشسته\nشهر نفس می‌کشد آرام',
+    audio: { name: 'meh-zard.mp3', size: 7800000, type: 'audio/mpeg' },
   },
 ]
 

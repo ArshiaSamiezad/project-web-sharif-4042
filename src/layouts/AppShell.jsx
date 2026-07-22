@@ -56,6 +56,13 @@ function NavIcon({ name }) {
           <path d="M12 4v3M12 17v3M4 12h3M17 12h3" />
         </svg>
       )
+    case 'works':
+      return (
+        <svg {...props}>
+          <rect x="4" y="5" width="16" height="14" rx="1.5" />
+          <path d="M8 9h8M8 12h8M8 15h5" />
+        </svg>
+      )
     case 'profile':
       return (
         <svg {...props}>
@@ -104,12 +111,21 @@ function NavIcon({ name }) {
 }
 
 export default function AppShell() {
-  const { currentUser, logout, defaultAvatar, getUnreadNotificationCount } = useAuth()
+  const { currentUser, logout, defaultAvatar, getUnreadNotificationCount, isVerifiedArtist } =
+    useAuth()
   const { t, subscriptionLabel, formatNumber } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(() => Boolean(getItem('sidebarCollapsed', false)))
   const unreadCount = getUnreadNotificationCount()
+
+  const navItems = [
+    ...NAV.slice(0, 3),
+    ...(isVerifiedArtist(currentUser)
+      ? [{ to: '/artist/works', labelKey: 'nav.works', shortKey: 'nav.worksShort', icon: 'works' }]
+      : []),
+    ...NAV.slice(3),
+  ]
 
   function handleLogout() {
     logout()
@@ -127,7 +143,9 @@ export default function AppShell() {
   function linkClass(item, isActive) {
     const profileActive =
       item.to === '/profile' && location.pathname.startsWith('/profile')
-    return isActive || profileActive ? 'shell__link is-active' : 'shell__link'
+    const worksActive =
+      item.to === '/artist/works' && location.pathname.startsWith('/artist/works')
+    return isActive || profileActive || worksActive ? 'shell__link is-active' : 'shell__link'
   }
 
   const expandLabel = collapsed ? t('nav.expand') : t('nav.collapse')
@@ -156,7 +174,7 @@ export default function AppShell() {
         </div>
 
         <nav className="shell__nav" aria-label={t('nav.mainMenu')}>
-          {NAV.map((item) => {
+          {navItems.map((item) => {
             const label = t(item.labelKey)
             const shortLabel = t(item.shortKey)
             const showBadge = item.to === '/notifications' && unreadCount > 0

@@ -470,6 +470,469 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function isVerifiedArtist(user = currentUser) {
+    return Boolean(user && user.role === 'artist' && user.status === 'approved')
+  }
+
+  function requireVerifiedArtist() {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.worksLoginRequired') }
+    }
+    if (!isVerifiedArtist(currentUser)) {
+      return { ok: false, error: t('errors.worksArtistsOnly') }
+    }
+    return { ok: true }
+  }
+
+  function parseCollaborators(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean)
+    }
+    return String(value || '')
+      .split(/[,،]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  function normalizeAudio(audio) {
+    if (!audio || typeof audio !== 'object') return null
+    const name = String(audio.name || '').trim()
+    if (!name) return null
+    return {
+      name,
+      size: Number(audio.size) || 0,
+      type: String(audio.type || ''),
+    }
+  }
+
+  function releaseDateFromYear(year) {
+    const y = Number(year)
+    if (!Number.isFinite(y) || y < 1900 || y > 2100) {
+      return new Date().toISOString().slice(0, 10)
+    }
+    return `${Math.trunc(y)}-01-01`
+  }
+
+  function estimateRevenue(plays) {
+    return Math.round((Number(plays) || 0) * 42)
+  }
+
+  function stripTracksFromPlaylists(trackIds) {
+    if (!trackIds.length) return
+    const idSet = new Set(trackIds)
+    const playlists = storage.getItem('playlists', [])
+    storage.setItem(
+      'playlists',
+      playlists.map((p) => ({
+        ...p,
+        trackIds: (p.trackIds || []).filter((id) => !idSet.has(id)),
+      })),
+    )
+  }
+
+  function getOwnedAlbums(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+    return storage.getItem('albums', []).filter((a) => a.artistId === userId)
+  }
+
+  function getOwnedSingles(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+    return storage
+      .getItem('tracks', [])
+      .filter((tr) => tr.artistId === userId && !tr.albumId)
+  }
+
+  function getOwnedWorks(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return { albums: [], singles: [] }
+    return {
+      albums: getOwnedAlbums(userId),
+      singles: getOwnedSingles(userId),
+    }
+  }
+
+  function getAlbumStats(albumId) {
+    void catalogVersion
+    const album = storage.getItem('albums', []).find((a) => a.id === albumId)
+    const tracks = storage
+      .getItem('tracks', [])
+      .filter((tr) => tr.albumId === albumId)
+    const streams = tracks.reduce((sum, tr) => sum + (tr.plays || 0), 0)
+    const listeners = Math.max(
+      album?.listeners || 0,
+      ...tracks.map((tr) => tr.listeners || 0),
+      0,
+    )
+    return {
+      listeners,
+      streams,
+      revenue: estimateRevenue(streams),
+      trackCount: tracks.length,
+    }
+  }
+
+  function getTrackStats(trackId) {
+    void catalogVersion
+    const track = storage.getItem('tracks', []).find((tr) => tr.id === trackId)
+    const streams = track?.plays || 0
+    return {
+      listeners: track?.listeners || 0,
+      streams,
+      revenue: estimateRevenue(streams),
+      trackCount: track ? 1 : 0,
+    }
+  }
+
+  function buildTrackRecord({
+    id,
+    title,
+    albumId,
+    cover,
+    releasedAt,
+    earlyAccess,
+    genre,
+    collaborators,
+    lyrics,
+    audio,
+  }) {
+    const artistName = currentUser.artistName || currentUser.displayName
+    return {
+      id,
+      title,
+      artistId: currentUser.id,
+      artistName,
+      albumId: albumId ?? null,
+      cover,
+      plays: 0,
+      listeners: 0,
+      releasedAt,
+      earlyAccess: Boolean(earlyAccess),
+      genre: String(genre || '').trim(),
+      collaborators: parseCollaborators(collaborators),
+      lyrics: String(lyrics || ''),
+      audio: normalizeAudio(audio),
+    }
+  }
+
+  function publishWork(payload) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const releaseType = payload?.releaseType === 'album' ? 'album' : 'single'
+    const title = String(payload?.title ?? '').trim()
+    if (!title) {
+      return { ok: false, error: t('errors.worksTitleRequired') }
+    }
+
+    const genre = String(payload?.genre ?? '').trim()
+    if (!genre) {
+      return { ok: false, error: t('errors.worksGenreRequired') }
+    }
+
+    const year = Number(payload?.releaseYear)
+    if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+      return { ok: false, error: t('errors.worksYearInvalid') }
+    }
+
+    const releasedAt = releaseDateFromYear(year)
+    const collaborators = parseCollaborators(payload?.collaborators)
+    const earlyAccess = Boolean(payload?.earlyAccess)
+    const artistName = currentUser.artistName || currentUser.displayName
+    const coverFallback = (id) => `https://picsum.photos/seed/sepatify-${id}/400/400`
+    const cover = String(payload?.cover || '').trim()
+
+    if (releaseType === 'single') {
+      const audio = normalizeAudio(payload?.audio)
+      if (!audio) {
+        return { ok: false, error: t('errors.worksAudioRequired') }
+      }
+
+      const id = `tr-${Date.now()}`
+      const track = buildTrackRecord({
+        id,
+        title,
+        albumId: null,
+        cover: cover || coverFallback(id),
+        releasedAt,
+        earlyAccess,
+        genre,
+        collaborators,
+        lyrics: payload?.lyrics,
+        audio,
+      })
+
+      const tracks = storage.getItem('tracks', [])
+      storage.setItem('tracks', [track, ...tracks])
+      bumpCatalog()
+      return { ok: true, kind: 'single', track }
+    }
+
+    const albumId = `al-${Date.now()}`
+    const albumCover = cover || coverFallback(albumId)
+    const album = {
+      id: albumId,
+      title,
+      artistId: currentUser.id,
+      artistName,
+      cover: albumCover,
+      releasedAt,
+      listeners: 0,
+      earlyAccess,
+      genre,
+      collaborators,
+    }
+
+    const inputTracks = Array.isArray(payload?.tracks) ? payload.tracks : []
+    if (inputTracks.length === 0) {
+      return { ok: false, error: t('errors.worksAlbumTracksRequired') }
+    }
+
+    const newTracks = []
+    for (let i = 0; i < inputTracks.length; i += 1) {
+      const item = inputTracks[i]
+      const trackTitle = String(item?.title ?? '').trim()
+      if (!trackTitle) {
+        return { ok: false, error: t('errors.worksTrackTitleRequired') }
+      }
+      const audio = normalizeAudio(item?.audio)
+      if (!audio) {
+        return { ok: false, error: t('errors.worksAudioRequired') }
+      }
+      const trackId = `tr-${Date.now()}-${i}`
+      newTracks.push(
+        buildTrackRecord({
+          id: trackId,
+          title: trackTitle,
+          albumId,
+          cover: albumCover,
+          releasedAt,
+          earlyAccess,
+          genre,
+          collaborators,
+          lyrics: item?.lyrics,
+          audio,
+        }),
+      )
+    }
+
+    const albums = storage.getItem('albums', [])
+    const tracks = storage.getItem('tracks', [])
+    storage.setItem('albums', [album, ...albums])
+    storage.setItem('tracks', [...newTracks, ...tracks])
+    bumpCatalog()
+    return { ok: true, kind: 'album', album, tracks: newTracks }
+  }
+
+  function updateAlbum(albumId, patch) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const albums = storage.getItem('albums', [])
+    const album = albums.find((a) => a.id === albumId)
+    if (!album || album.artistId !== currentUser.id) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const nextPatch = { ...patch }
+    if (nextPatch.title != null) {
+      const title = String(nextPatch.title).trim()
+      if (!title) return { ok: false, error: t('errors.worksTitleRequired') }
+      nextPatch.title = title
+    }
+    if (nextPatch.genre != null) {
+      const genre = String(nextPatch.genre).trim()
+      if (!genre) return { ok: false, error: t('errors.worksGenreRequired') }
+      nextPatch.genre = genre
+    }
+    if (nextPatch.releaseYear != null) {
+      const year = Number(nextPatch.releaseYear)
+      if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+        return { ok: false, error: t('errors.worksYearInvalid') }
+      }
+      nextPatch.releasedAt = releaseDateFromYear(year)
+      delete nextPatch.releaseYear
+    }
+    if (nextPatch.collaborators != null) {
+      nextPatch.collaborators = parseCollaborators(nextPatch.collaborators)
+    }
+    if (nextPatch.cover != null) {
+      nextPatch.cover = String(nextPatch.cover).trim() || album.cover
+    }
+    if (nextPatch.earlyAccess != null) {
+      nextPatch.earlyAccess = Boolean(nextPatch.earlyAccess)
+    }
+
+    const nextAlbums = albums.map((a) =>
+      a.id === albumId ? { ...a, ...nextPatch } : a,
+    )
+    storage.setItem('albums', nextAlbums)
+
+    const syncFields = {}
+    if (nextPatch.title != null) syncFields.albumTitle = nextPatch.title
+    if (nextPatch.cover != null) syncFields.cover = nextPatch.cover
+    if (nextPatch.earlyAccess != null) syncFields.earlyAccess = nextPatch.earlyAccess
+    if (nextPatch.genre != null) syncFields.genre = nextPatch.genre
+    if (nextPatch.collaborators != null) syncFields.collaborators = nextPatch.collaborators
+    if (nextPatch.releasedAt != null) syncFields.releasedAt = nextPatch.releasedAt
+
+    if (Object.keys(syncFields).length > 0) {
+      const { albumTitle: _ignored, ...trackPatch } = syncFields
+      void _ignored
+      if (Object.keys(trackPatch).length > 0) {
+        const tracks = storage.getItem('tracks', [])
+        storage.setItem(
+          'tracks',
+          tracks.map((tr) =>
+            tr.albumId === albumId ? { ...tr, ...trackPatch } : tr,
+          ),
+        )
+      }
+    }
+
+    bumpCatalog()
+    return { ok: true, album: nextAlbums.find((a) => a.id === albumId) }
+  }
+
+  function deleteAlbum(albumId) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const albums = storage.getItem('albums', [])
+    const album = albums.find((a) => a.id === albumId)
+    if (!album || album.artistId !== currentUser.id) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const tracks = storage.getItem('tracks', [])
+    const removedIds = tracks.filter((tr) => tr.albumId === albumId).map((tr) => tr.id)
+    storage.setItem(
+      'albums',
+      albums.filter((a) => a.id !== albumId),
+    )
+    storage.setItem(
+      'tracks',
+      tracks.filter((tr) => tr.albumId !== albumId),
+    )
+    stripTracksFromPlaylists(removedIds)
+    bumpCatalog()
+    return { ok: true }
+  }
+
+  function updateTrack(trackId, patch) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const tracks = storage.getItem('tracks', [])
+    const track = tracks.find((tr) => tr.id === trackId)
+    if (!track || track.artistId !== currentUser.id) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const nextPatch = { ...patch }
+    if (nextPatch.title != null) {
+      const title = String(nextPatch.title).trim()
+      if (!title) return { ok: false, error: t('errors.worksTrackTitleRequired') }
+      nextPatch.title = title
+    }
+    if (nextPatch.genre != null) {
+      const genre = String(nextPatch.genre).trim()
+      if (!genre) return { ok: false, error: t('errors.worksGenreRequired') }
+      nextPatch.genre = genre
+    }
+    if (nextPatch.releaseYear != null) {
+      const year = Number(nextPatch.releaseYear)
+      if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+        return { ok: false, error: t('errors.worksYearInvalid') }
+      }
+      nextPatch.releasedAt = releaseDateFromYear(year)
+      delete nextPatch.releaseYear
+    }
+    if (nextPatch.collaborators != null) {
+      nextPatch.collaborators = parseCollaborators(nextPatch.collaborators)
+    }
+    if (nextPatch.lyrics != null) {
+      nextPatch.lyrics = String(nextPatch.lyrics)
+    }
+    if (nextPatch.audio != null) {
+      const audio = normalizeAudio(nextPatch.audio)
+      if (!audio) return { ok: false, error: t('errors.worksAudioRequired') }
+      nextPatch.audio = audio
+    }
+    if (nextPatch.cover != null) {
+      nextPatch.cover = String(nextPatch.cover).trim() || track.cover
+    }
+    if (nextPatch.earlyAccess != null) {
+      nextPatch.earlyAccess = Boolean(nextPatch.earlyAccess)
+    }
+
+    const nextTracks = tracks.map((tr) =>
+      tr.id === trackId ? { ...tr, ...nextPatch } : tr,
+    )
+    storage.setItem('tracks', nextTracks)
+    bumpCatalog()
+    return { ok: true, track: nextTracks.find((tr) => tr.id === trackId) }
+  }
+
+  function deleteTrack(trackId) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const tracks = storage.getItem('tracks', [])
+    const track = tracks.find((tr) => tr.id === trackId)
+    if (!track || track.artistId !== currentUser.id) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    storage.setItem(
+      'tracks',
+      tracks.filter((tr) => tr.id !== trackId),
+    )
+    stripTracksFromPlaylists([trackId])
+    bumpCatalog()
+    return { ok: true }
+  }
+
+  function addTrackToAlbum(albumId, payload) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const albums = storage.getItem('albums', [])
+    const album = albums.find((a) => a.id === albumId)
+    if (!album || album.artistId !== currentUser.id) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const title = String(payload?.title ?? '').trim()
+    if (!title) {
+      return { ok: false, error: t('errors.worksTrackTitleRequired') }
+    }
+    const audio = normalizeAudio(payload?.audio)
+    if (!audio) {
+      return { ok: false, error: t('errors.worksAudioRequired') }
+    }
+
+    const id = `tr-${Date.now()}`
+    const track = buildTrackRecord({
+      id,
+      title,
+      albumId,
+      cover: album.cover,
+      releasedAt: album.releasedAt,
+      earlyAccess: album.earlyAccess,
+      genre: album.genre || payload?.genre || '',
+      collaborators: payload?.collaborators ?? album.collaborators,
+      lyrics: payload?.lyrics,
+      audio,
+    })
+
+    const tracks = storage.getItem('tracks', [])
+    storage.setItem('tracks', [track, ...tracks])
+    bumpCatalog()
+    return { ok: true, track }
+  }
+
   function getAllNotifications() {
     void catalogVersion
     return storage.getItem('notifications', [])
@@ -559,6 +1022,19 @@ export function AuthProvider({ children }) {
     deletePlaylist,
     toggleTrackInPlaylist,
     toggleAlbumInPlaylist,
+    isVerifiedArtist,
+    getOwnedAlbums,
+    getOwnedSingles,
+    getOwnedWorks,
+    getAlbumStats,
+    getTrackStats,
+    estimateRevenue,
+    publishWork,
+    updateAlbum,
+    deleteAlbum,
+    updateTrack,
+    deleteTrack,
+    addTrackToAlbum,
     getNotifications,
     getUnreadNotificationCount,
     markNotificationRead,
