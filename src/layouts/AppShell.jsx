@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
 import { getItem, setItem } from '../lib/storage'
 import PageTransition from '../components/PageTransition'
 import './AppShell.css'
 
 const NAV = [
-  { to: '/home', label: 'خانه', shortLabel: 'خانه', end: true, icon: 'home' },
-  { to: '/playlists', label: 'پلی‌لیست‌ها', shortLabel: 'پلی‌لیست', icon: 'playlists' },
-  { to: '/catalog', label: 'آلبوم‌ها و تک‌آهنگ‌ها', shortLabel: 'آرشیو', icon: 'catalog' },
-  { to: '/profile', label: 'نمایه کاربری', shortLabel: 'نمایه', icon: 'profile' },
-  { to: '/settings', label: 'تنظیمات برنامه', shortLabel: 'تنظیمات', icon: 'settings' },
+  { to: '/home', labelKey: 'nav.home', shortKey: 'nav.homeShort', end: true, icon: 'home' },
+  { to: '/playlists', labelKey: 'nav.playlists', shortKey: 'nav.playlistsShort', icon: 'playlists' },
+  { to: '/catalog', labelKey: 'nav.catalog', shortKey: 'nav.catalogShort', icon: 'catalog' },
+  { to: '/profile', labelKey: 'nav.profile', shortKey: 'nav.profileShort', icon: 'profile' },
+  { to: '/settings', labelKey: 'nav.settings', shortKey: 'nav.settingsShort', icon: 'settings' },
 ]
 
 function NavIcon({ name }) {
@@ -89,6 +90,7 @@ function NavIcon({ name }) {
 
 export default function AppShell() {
   const { currentUser, logout, defaultAvatar } = useAuth()
+  const { t, subscriptionLabel } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(() => Boolean(getItem('sidebarCollapsed', false)))
@@ -112,12 +114,15 @@ export default function AppShell() {
     return isActive || profileActive ? 'shell__link is-active' : 'shell__link'
   }
 
+  const expandLabel = collapsed ? t('nav.expand') : t('nav.collapse')
+  const logoutLabel = t('nav.logout')
+
   return (
     <div className={`shell${collapsed ? ' shell--collapsed' : ''}`}>
-      <aside className="shell__sidebar" aria-label="ناوبری">
+      <aside className="shell__sidebar" aria-label={t('nav.sidebar')}>
         <div className="shell__sidebar-head">
-          <p className="shell__brand" title="Sepatify">
-            <span className="shell__brand-full">Sepatify</span>
+          <p className="shell__brand" title={t('common.brand')}>
+            <span className="shell__brand-full">{t('common.brand')}</span>
             <span className="shell__brand-short" aria-hidden="true">
               S
             </span>
@@ -127,39 +132,43 @@ export default function AppShell() {
             className="shell__collapse"
             onClick={toggleCollapsed}
             aria-expanded={!collapsed}
-            aria-label={collapsed ? 'باز کردن منو' : 'بستن منو'}
-            title={collapsed ? 'باز کردن منو' : 'بستن منو'}
+            aria-label={expandLabel}
+            title={expandLabel}
           >
             <NavIcon name={collapsed ? 'expand' : 'collapse'} />
           </button>
         </div>
 
-        <nav className="shell__nav" aria-label="منوی اصلی">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => linkClass(item, isActive)}
-              title={item.label}
-            >
-              <NavIcon name={item.icon} />
-              <span className="shell__link-label">
-                <span className="shell__link-label-full">{item.label}</span>
-                <span className="shell__link-label-short">{item.shortLabel}</span>
-              </span>
-            </NavLink>
-          ))}
+        <nav className="shell__nav" aria-label={t('nav.mainMenu')}>
+          {NAV.map((item) => {
+            const label = t(item.labelKey)
+            const shortLabel = t(item.shortKey)
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => linkClass(item, isActive)}
+                title={label}
+              >
+                <NavIcon name={item.icon} />
+                <span className="shell__link-label">
+                  <span className="shell__link-label-full">{label}</span>
+                  <span className="shell__link-label-short">{shortLabel}</span>
+                </span>
+              </NavLink>
+            )
+          })}
         </nav>
 
         <button
           type="button"
           className="shell__logout shell__logout--sidebar"
           onClick={handleLogout}
-          title="خروج"
+          title={logoutLabel}
         >
           <NavIcon name="logout" />
-          <span className="shell__link-label">خروج</span>
+          <span className="shell__link-label">{logoutLabel}</span>
         </button>
       </aside>
 
@@ -175,9 +184,11 @@ export default function AppShell() {
             <div>
               <p className="shell__name">{currentUser.displayName}</p>
               {currentUser.subscription === 'gold' ? (
-                <span className="shell__badge">طلایی</span>
+                <span className="shell__badge">{subscriptionLabel('gold')}</span>
               ) : currentUser.subscription === 'silver' ? (
-                <span className="shell__badge shell__badge--silver">نقره‌ای</span>
+                <span className="shell__badge shell__badge--silver">
+                  {subscriptionLabel('silver')}
+                </span>
               ) : null}
             </div>
           </div>
@@ -185,10 +196,10 @@ export default function AppShell() {
             type="button"
             className="shell__logout shell__logout--top"
             onClick={handleLogout}
-            title="خروج"
+            title={logoutLabel}
           >
             <NavIcon name="logout" />
-            <span className="shell__link-label">خروج</span>
+            <span className="shell__link-label">{logoutLabel}</span>
           </button>
         </header>
         <div className="shell__page">

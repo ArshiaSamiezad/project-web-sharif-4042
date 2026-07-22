@@ -1,6 +1,7 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
+import { useI18n } from '../i18n/I18nProvider'
 import PlaylistMenu from '../components/PlaylistMenu'
 import PlayingBars from '../components/PlayingBars'
 import './CatalogPages.css'
@@ -9,6 +10,7 @@ export default function AlbumPage() {
   const { albumId } = useParams()
   const { currentUser, getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
+  const { t, formatNumber } = useI18n()
   const navigate = useNavigate()
   const catalog = getCatalog()
 
@@ -29,13 +31,13 @@ export default function AlbumPage() {
   return (
     <div className="catalog album-page">
       <button type="button" className="album-page__back" onClick={() => navigate('/catalog')}>
-        بازگشت به آرشیو
+        {t('catalog.backToCatalog')}
       </button>
 
       <header className="album-page__hero">
         <img src={album.cover} alt="" className="album-page__cover" />
         <div className="album-page__info">
-          <p className="album-page__eyebrow">آلبوم</p>
+          <p className="album-page__eyebrow">{t('common.album')}</p>
           <h1>{album.title}</h1>
           <Link
             to={artist?.username ? `/profile/${artist.username}` : '/profile'}
@@ -46,9 +48,11 @@ export default function AlbumPage() {
           <p className="album-page__meta">
             <span dir="ltr">{album.releasedAt}</span>
             <span>·</span>
-            <span>{(album.listeners || 0).toLocaleString('fa-IR')} شنونده</span>
+            <span>
+              {t('common.listenerCount', { count: formatNumber(album.listeners || 0) })}
+            </span>
             <span>·</span>
-            <span>{tracks.length.toLocaleString('fa-IR')} قطعه</span>
+            <span>{t('common.pieceCount', { count: formatNumber(tracks.length) })}</span>
           </p>
           <div className="album-page__actions">
             <PlaylistMenu mode="album" albumId={album.id} />
@@ -57,7 +61,7 @@ export default function AlbumPage() {
       </header>
 
       {tracks.length === 0 ? (
-        <p className="catalog__empty">آهنگی برای این آلبوم ثبت نشده است.</p>
+        <p className="catalog__empty">{t('catalog.emptyAlbumTracks')}</p>
       ) : (
         <ul className="album-page__tracks">
           {tracks.map((track, index) => {
@@ -68,13 +72,17 @@ export default function AlbumPage() {
                 className={`album-track${isPlaying ? ' is-playing' : ''}`}
               >
                 <span className="album-track__index" aria-hidden="true">
-                  {isPlaying ? <PlayingBars /> : (index + 1).toLocaleString('fa-IR')}
+                  {isPlaying ? <PlayingBars /> : formatNumber(index + 1)}
                 </span>
                 <button
                   type="button"
                   className="album-track__cover"
                   onClick={() => playTrack(track.id)}
-                  aria-label={isPlaying ? `توقف ${track.title}` : `پخش ${track.title}`}
+                  aria-label={
+                    isPlaying
+                      ? t('common.pauseAria', { title: track.title })
+                      : t('common.playAria', { title: track.title })
+                  }
                 >
                   <img src={track.cover} alt="" />
                 </button>
@@ -94,11 +102,9 @@ export default function AlbumPage() {
                   </Link>
                 </div>
                 {isPlaying ? (
-                  <span className="album-track__badge">در حال پخش</span>
+                  <span className="album-track__badge">{t('common.nowPlaying')}</span>
                 ) : null}
-                <span className="album-track__plays">
-                  {(track.plays || 0).toLocaleString('fa-IR')}
-                </span>
+                <span className="album-track__plays">{formatNumber(track.plays || 0)}</span>
                 <div className="album-track__menu">
                   <PlaylistMenu mode="track" trackId={track.id} />
                 </div>

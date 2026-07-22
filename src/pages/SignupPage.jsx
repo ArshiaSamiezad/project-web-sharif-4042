@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import PrivacyModal from '../components/PrivacyModal'
+import { useI18n } from '../i18n/I18nProvider'
 import './AuthPages.css'
 
 const initialListener = {
@@ -24,6 +25,7 @@ const initialArtist = {
 
 export default function SignupPage() {
   const { ready, currentUser, registerListener, registerArtist } = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const [tab, setTab] = useState('listener')
   const [listener, setListener] = useState(initialListener)
@@ -67,7 +69,7 @@ export default function SignupPage() {
     }
     navigate('/login', {
       replace: true,
-      state: { notice: 'ثبت‌نام با موفقیت انجام شد. وارد شوید.' },
+      state: { noticeKey: 'auth.signupSuccess' },
     })
   }
 
@@ -83,9 +85,7 @@ export default function SignupPage() {
     }
     navigate('/login', {
       replace: true,
-      state: {
-        notice: 'درخواست هنرمند ثبت شد و در وضعیت «در انتظار تأیید» قرار گرفت. پس از تأیید می‌توانید وارد شوید.',
-      },
+      state: { noticeKey: 'auth.artistPendingNotice' },
     })
   }
 
@@ -96,12 +96,12 @@ export default function SignupPage() {
 
       <div className="auth-page__content auth-page__content--wide">
         <header className="auth-page__brand">
-          <p className="auth-page__mark">Sepatify</p>
-          <h1 className="auth-page__headline">ثبت‌نام</h1>
-          <p className="auth-page__sub">حساب شنونده یا درخواست عضویت به‌عنوان هنرمند بسازید.</p>
+          <p className="auth-page__mark">{t('common.brand')}</p>
+          <h1 className="auth-page__headline">{t('auth.signupTitle')}</h1>
+          <p className="auth-page__sub">{t('auth.signupSub')}</p>
         </header>
 
-        <div className="auth-tabs" role="tablist" aria-label="نوع ثبت‌نام">
+        <div className="auth-tabs" role="tablist" aria-label={t('auth.signupType')}>
           <button
             type="button"
             role="tab"
@@ -112,7 +112,7 @@ export default function SignupPage() {
               setError('')
             }}
           >
-            شنونده
+            {t('auth.listener')}
           </button>
           <button
             type="button"
@@ -124,25 +124,25 @@ export default function SignupPage() {
               setError('')
             }}
           >
-            هنرمند
+            {t('auth.artist')}
           </button>
         </div>
 
         {tab === 'listener' ? (
           <form className="auth-form" onSubmit={handleListenerSubmit} noValidate>
             <label className="auth-form__field">
-              <span>نام نمایشی</span>
+              <span>{t('auth.displayName')}</span>
               <input
                 type="text"
                 value={listener.displayName}
                 onChange={(e) => patchListener({ displayName: e.target.value })}
                 required
               />
-              <small>با نام کاربری که سامانه اختصاص می‌دهد متفاوت است.</small>
+              <small>{t('auth.displayNameHint')}</small>
             </label>
 
             <label className="auth-form__field">
-              <span>ایمیل</span>
+              <span>{t('auth.email')}</span>
               <input
                 type="email"
                 autoComplete="email"
@@ -154,7 +154,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>رمز عبور</span>
+              <span>{t('auth.password')}</span>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -166,7 +166,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>تأیید رمز عبور</span>
+              <span>{t('auth.confirmPassword')}</span>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -178,7 +178,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>تاریخ تولد</span>
+              <span>{t('auth.birthDate')}</span>
               <input
                 type="date"
                 value={listener.birthDate}
@@ -189,17 +189,17 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>جنسیت</span>
+              <span>{t('auth.gender')}</span>
               <select
                 value={listener.gender}
                 onChange={(e) => patchListener({ gender: e.target.value })}
                 required
               >
-                <option value="">انتخاب کنید</option>
-                <option value="female">زن</option>
-                <option value="male">مرد</option>
-                <option value="other">سایر</option>
-                <option value="unspecified">ترجیح می‌دهم نگویم</option>
+                <option value="">{t('common.genderPlaceholder')}</option>
+                <option value="female">{t('common.genderFemale')}</option>
+                <option value="male">{t('common.genderMale')}</option>
+                <option value="other">{t('common.genderOther')}</option>
+                <option value="unspecified">{t('common.genderUnspecified')}</option>
               </select>
             </label>
 
@@ -210,15 +210,15 @@ export default function SignupPage() {
                 onChange={(e) => patchListener({ acceptedPrivacy: e.target.checked })}
               />
               <span>
-                سیاست{' '}
+                {t('auth.acceptPrivacyBefore')}{' '}
                 <button
                   type="button"
                   className="auth-form__inline-link"
                   onClick={() => setPrivacyOpen(true)}
                 >
-                  حریم خصوصی
+                  {t('auth.privacyPolicy')}
                 </button>{' '}
-                را می‌پذیرم.
+                {t('auth.acceptPrivacyAfter')}
               </span>
             </label>
 
@@ -229,13 +229,13 @@ export default function SignupPage() {
             ) : null}
 
             <button className="auth-form__submit" type="submit" disabled={submitting}>
-              ثبت‌نام
+              {t('auth.signupSubmit')}
             </button>
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleArtistSubmit} noValidate>
             <label className="auth-form__field">
-              <span>ایمیل</span>
+              <span>{t('auth.email')}</span>
               <input
                 type="email"
                 autoComplete="email"
@@ -247,7 +247,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>رمز عبور</span>
+              <span>{t('auth.password')}</span>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -259,7 +259,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>تأیید رمز عبور</span>
+              <span>{t('auth.confirmPassword')}</span>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -271,7 +271,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>نام هنری</span>
+              <span>{t('auth.artistName')}</span>
               <input
                 type="text"
                 value={artist.artistName}
@@ -281,7 +281,7 @@ export default function SignupPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>نمونه کارها</span>
+              <span>{t('auth.samples')}</span>
               <input
                 type="file"
                 accept="audio/*,image/*,.mp3,.wav,.flac,.jpg,.png"
@@ -295,7 +295,7 @@ export default function SignupPage() {
                   ))}
                 </ul>
               ) : (
-                <small>یک یا چند فایل نمونه بارگذاری کنید.</small>
+                <small>{t('auth.samplesHint')}</small>
               )}
             </label>
 
@@ -306,13 +306,13 @@ export default function SignupPage() {
             ) : null}
 
             <button className="auth-form__submit" type="submit" disabled={submitting}>
-              ارسال درخواست
+              {t('auth.artistSubmit')}
             </button>
           </form>
         )}
 
         <p className="auth-page__switch">
-          حساب دارید؟ <Link to="/login">ورود</Link>
+          {t('auth.haveAccount')} <Link to="/login">{t('auth.loginLink')}</Link>
         </p>
       </div>
 

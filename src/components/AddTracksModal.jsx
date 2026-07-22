@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
 import './AddTracksModal.css'
 
 function matchesQuery(text, query) {
@@ -11,6 +12,7 @@ function matchesQuery(text, query) {
 
 export default function AddTracksModal({ open, playlistId, onClose }) {
   const { currentUser, getCatalog, toggleTrackInPlaylist } = useAuth()
+  const { t } = useI18n()
   const catalog = getCatalog()
   const titleId = useId()
   const inputRef = useRef(null)
@@ -69,7 +71,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
       setMessage(result.error)
       return
     }
-    setMessage(result.added ? 'به پلی‌لیست افزوده شد.' : 'از پلی‌لیست حذف شد.')
+    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
   }
 
   return createPortal(
@@ -83,21 +85,21 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
       >
         <header className="add-tracks-modal__head">
           <div>
-            <h2 id={titleId}>افزودن آهنگ</h2>
-            <p>به «{playlist.title}»</p>
+            <h2 id={titleId}>{t('playlists.addTracksTitle')}</h2>
+            <p>{t('playlists.addTracksTo', { title: playlist.title })}</p>
           </div>
           <button
             type="button"
             className="add-tracks-modal__close"
             onClick={onClose}
-            aria-label="بستن"
+            aria-label={t('common.close')}
           >
             ×
           </button>
         </header>
 
         <label className="add-tracks-modal__search">
-          <span className="visually-hidden">جستجو</span>
+          <span className="visually-hidden">{t('common.search')}</span>
           <span className="add-tracks-modal__search-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="11" cy="11" r="6.5" />
@@ -109,7 +111,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="جستجوی نام آهنگ، هنرمند یا آلبوم…"
+            placeholder={t('playlists.addTracksSearch')}
             autoComplete="off"
           />
         </label>
@@ -118,7 +120,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
 
         <div className="add-tracks-modal__list">
           {results.length === 0 ? (
-            <p className="add-tracks-modal__empty">موردی پیدا نشد.</p>
+            <p className="add-tracks-modal__empty">{t('playlists.nothingFound')}</p>
           ) : (
             results.map((track) => {
               const inPlaylist = trackIds.includes(track.id)
@@ -133,7 +135,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
                     <strong>{track.title}</strong>
                     <span>
                       {track.artistName}
-                      {album ? ` • ${album.title}` : ' • تک‌آهنگ'}
+                      {album ? ` • ${album.title}` : t('playlists.singleSuffix')}
                     </span>
                   </div>
                   <button
@@ -141,7 +143,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
                     className={`add-tracks-modal__action${inPlaylist ? ' is-added' : ''}`}
                     onClick={() => handleToggle(track.id)}
                   >
-                    {inPlaylist ? 'حذف' : 'افزودن'}
+                    {inPlaylist ? t('common.delete') : t('playlists.add')}
                   </button>
                 </article>
               )

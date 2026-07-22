@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
 import PlayingBars from '../components/PlayingBars'
+import { useI18n } from '../i18n/I18nProvider'
 import './HomePage.css'
 
 function TileRow({ children }) {
@@ -15,6 +16,7 @@ function TileRow({ children }) {
 export default function HomePage() {
   const { currentUser, getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
+  const { t } = useI18n()
   const navigate = useNavigate()
   const catalog = getCatalog()
 
@@ -29,12 +31,14 @@ export default function HomePage() {
     .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt))
 
   const popularTracks = [...catalog.tracks]
-    .filter((t) => !t.earlyAccess)
+    .filter((track) => !track.earlyAccess)
     .sort((a, b) => b.plays - a.plays)
 
   const earlyAccessItems = [
     ...catalog.albums.filter((a) => a.earlyAccess).map((a) => ({ ...a, kind: 'album' })),
-    ...catalog.tracks.filter((t) => t.earlyAccess).map((t) => ({ ...t, kind: 'track' })),
+    ...catalog.tracks
+      .filter((track) => track.earlyAccess)
+      .map((track) => ({ ...track, kind: 'track' })),
   ]
 
   function artistPath(artistId) {
@@ -45,7 +49,7 @@ export default function HomePage() {
   return (
     <div className="home">
       <section className="home__section">
-        <h2>آخرین پلی‌لیست‌های شنیده‌شده</h2>
+        <h2>{t('home.recentPlaylists')}</h2>
         <TileRow>
           {recentPlaylists.map((item) => (
             <article
@@ -69,7 +73,7 @@ export default function HomePage() {
       </section>
 
       <section className="home__section">
-        <h2>آخرین آلبوم‌های منتشرشده</h2>
+        <h2>{t('home.latestAlbums')}</h2>
         <TileRow>
           {latestAlbums.map((item) => (
             <article key={item.id} className="home__tile">
@@ -77,7 +81,7 @@ export default function HomePage() {
                 type="button"
                 className="home__tile-cover"
                 onClick={() => navigate(`/album/${item.id}`)}
-                aria-label={`باز کردن آلبوم ${item.title}`}
+                aria-label={t('common.openAlbumAria', { title: item.title })}
               >
                 <img src={item.cover} alt="" />
               </button>
@@ -89,7 +93,7 @@ export default function HomePage() {
                 {item.title}
               </button>
               <p className="home__tile-meta-row">
-                <span className="home__kind">آلبوم</span>
+                <span className="home__kind">{t('common.album')}</span>
                 <span className="home__kind-sep" aria-hidden="true">
                   •
                 </span>
@@ -107,7 +111,7 @@ export default function HomePage() {
       </section>
 
       <section className="home__section">
-        <h2>آهنگ‌های پرشنونده</h2>
+        <h2>{t('home.popularTracks')}</h2>
         <TileRow>
           {popularTracks.map((item) => {
             const isPlaying = playingTrackId === item.id
@@ -120,13 +124,17 @@ export default function HomePage() {
                   type="button"
                   className="home__tile-cover"
                   onClick={() => playTrack(item.id)}
-                  aria-label={isPlaying ? `توقف ${item.title}` : `پخش ${item.title}`}
+                  aria-label={
+                    isPlaying
+                      ? t('common.pauseAria', { title: item.title })
+                      : t('common.playAria', { title: item.title })
+                  }
                 >
                   <img src={item.cover} alt="" />
                   {isPlaying ? (
                     <span className="home__playing">
                       <PlayingBars />
-                      <span>در حال پخش</span>
+                      <span>{t('common.nowPlaying')}</span>
                     </span>
                   ) : (
                     <span className="home__play-hint" aria-hidden="true">
@@ -142,7 +150,7 @@ export default function HomePage() {
                   {item.title}
                 </button>
                 <p className="home__tile-meta-row">
-                  <span className="home__kind">تک‌آهنگ</span>
+                  <span className="home__kind">{t('common.single')}</span>
                   <span className="home__kind-sep" aria-hidden="true">
                     •
                   </span>
@@ -158,7 +166,7 @@ export default function HomePage() {
 
       {isGold ? (
         <section className="home__section home__section--early">
-          <h2>دسترسی زودهنگام</h2>
+          <h2>{t('home.earlyAccess')}</h2>
           <TileRow>
             {earlyAccessItems.map((item) => {
               if (item.kind === 'album') {
@@ -168,7 +176,7 @@ export default function HomePage() {
                       type="button"
                       className="home__tile-cover"
                       onClick={() => navigate(`/album/${item.id}`)}
-                      aria-label={`باز کردن آلبوم ${item.title}`}
+                      aria-label={t('common.openAlbumAria', { title: item.title })}
                     >
                       <img src={item.cover} alt="" />
                     </button>
@@ -180,7 +188,7 @@ export default function HomePage() {
                       {item.title}
                     </button>
                     <p className="home__tile-meta-row">
-                      <span className="home__kind">آلبوم</span>
+                      <span className="home__kind">{t('common.album')}</span>
                       <span className="home__kind-sep" aria-hidden="true">
                         •
                       </span>
@@ -202,13 +210,17 @@ export default function HomePage() {
                     type="button"
                     className="home__tile-cover"
                     onClick={() => playTrack(item.id)}
-                    aria-label={isPlaying ? `توقف ${item.title}` : `پخش ${item.title}`}
+                    aria-label={
+                      isPlaying
+                        ? t('common.pauseAria', { title: item.title })
+                        : t('common.playAria', { title: item.title })
+                    }
                   >
                     <img src={item.cover} alt="" />
                     {isPlaying ? (
                       <span className="home__playing">
                         <PlayingBars />
-                        <span>در حال پخش</span>
+                        <span>{t('common.nowPlaying')}</span>
                       </span>
                     ) : (
                       <span className="home__play-hint" aria-hidden="true">
@@ -224,7 +236,7 @@ export default function HomePage() {
                     {item.title}
                   </button>
                   <p className="home__tile-meta-row">
-                    <span className="home__kind">تک‌آهنگ</span>
+                    <span className="home__kind">{t('common.single')}</span>
                     <span className="home__kind-sep" aria-hidden="true">
                       •
                     </span>

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
 import './AuthPages.css'
 
 export default function LoginPage() {
   const { ready, currentUser, login, requestPasswordReset } = useAuth()
+  const { t } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const [mode, setMode] = useState('login')
@@ -17,7 +19,10 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (location.state?.notice) {
+    if (location.state?.noticeKey) {
+      setNotice(location.state.noticeKey)
+      navigate(location.pathname, { replace: true, state: {} })
+    } else if (location.state?.notice) {
       setNotice(location.state.notice)
       navigate(location.pathname, { replace: true, state: {} })
     }
@@ -52,6 +57,8 @@ export default function LoginPage() {
     setResetMessage(result.message)
   }
 
+  const noticeText = notice.includes('.') ? t(notice) : notice
+
   return (
     <main className="auth-page">
       <div className="auth-page__atmosphere" aria-hidden="true" />
@@ -59,21 +66,19 @@ export default function LoginPage() {
 
       <div className="auth-page__content">
         <header className="auth-page__brand">
-          <p className="auth-page__mark">Sepatify</p>
+          <p className="auth-page__mark">{t('common.brand')}</p>
           <h1 className="auth-page__headline">
-            {mode === 'login' ? 'ورود به حساب' : 'بازیابی رمز عبور'}
+            {mode === 'login' ? t('auth.loginTitle') : t('auth.resetTitle')}
           </h1>
           <p className="auth-page__sub">
-            {mode === 'login'
-              ? 'با ایمیل و رمز عبور وارد شوید.'
-              : 'ایمیل حساب خود را وارد کنید تا لینک بازیابی ارسال شود.'}
+            {mode === 'login' ? t('auth.loginSub') : t('auth.resetSub')}
           </p>
         </header>
 
         {mode === 'login' ? (
           <form className="auth-form" onSubmit={handleLogin} noValidate>
             <label className="auth-form__field">
-              <span>ایمیل</span>
+              <span>{t('auth.email')}</span>
               <input
                 type="email"
                 name="email"
@@ -89,7 +94,7 @@ export default function LoginPage() {
             </label>
 
             <label className="auth-form__field">
-              <span>رمز عبور</span>
+              <span>{t('auth.password')}</span>
               <input
                 type="password"
                 name="password"
@@ -106,7 +111,7 @@ export default function LoginPage() {
 
             {notice ? (
               <p className="auth-form__success" role="status">
-                {notice}
+                {noticeText}
               </p>
             ) : null}
 
@@ -122,7 +127,7 @@ export default function LoginPage() {
             ) : null}
 
             <button className="auth-form__submit" type="submit" disabled={submitting}>
-              ورود
+              {t('auth.login')}
             </button>
 
             <button
@@ -136,13 +141,13 @@ export default function LoginPage() {
                 setResetEmail(email)
               }}
             >
-              فراموشی رمز عبور
+              {t('auth.forgotPassword')}
             </button>
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleReset} noValidate>
             <label className="auth-form__field">
-              <span>ایمیل</span>
+              <span>{t('auth.email')}</span>
               <input
                 type="email"
                 name="resetEmail"
@@ -166,7 +171,7 @@ export default function LoginPage() {
             ) : null}
 
             <button className="auth-form__submit" type="submit">
-              ارسال لینک بازیابی
+              {t('auth.sendReset')}
             </button>
 
             <button
@@ -178,19 +183,19 @@ export default function LoginPage() {
                 setResetMessage('')
               }}
             >
-              بازگشت به ورود
+              {t('auth.backToLogin')}
             </button>
           </form>
         )}
 
         {mode === 'login' ? (
           <p className="auth-page__switch">
-            حساب ندارید؟ <Link to="/signup">ثبت‌نام</Link>
+            {t('auth.noAccount')} <Link to="/signup">{t('auth.signupLink')}</Link>
           </p>
         ) : null}
 
         <aside className="auth-page__hints">
-          <p>حساب‌های نمونه (رمز: password)</p>
+          <p>{t('auth.demoAccounts')}</p>
           <ul>
             <li>listener@sepatify.test</li>
             <li>silver@sepatify.test</li>

@@ -2,44 +2,40 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getUserSettings, useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
+import { useI18n } from '../i18n/I18nProvider'
 import './SettingsPage.css'
 
-function subscriptionLabel(type) {
-  switch (type) {
-    case 'gold':
-      return 'طلایی'
-    case 'silver':
-      return 'نقره‌ای'
-    default:
-      return 'عادی (پایه)'
-  }
-}
-
-function subscriptionHint(type) {
-  switch (type) {
-    case 'gold':
-      return 'دسترسی کامل، پلی‌لیست نامحدود و محتوای زودهنگام.'
-    case 'silver':
-      return 'پلی‌لیست بیشتر و امکان تغییر عکس نمایه.'
-    default:
-      return 'اشتراک پایه با محدودیت پلی‌لیست و امکانات محدود.'
-  }
-}
-
 const NOTIFICATION_OPTIONS = [
-  { value: 'all', label: 'همه اعلان‌ها' },
-  { value: 'important', label: 'فقط اعلان‌های مهم' },
-  { value: 'none', label: 'بدون اعلان' },
+  { value: 'all', labelKey: 'settings.notifAll' },
+  { value: 'important', labelKey: 'settings.notifImportant' },
+  { value: 'none', labelKey: 'settings.notifNone' },
 ]
+
+const LANGUAGE_OPTIONS = [
+  { value: 'fa', labelKey: 'settings.languageFa' },
+  { value: 'en', labelKey: 'settings.languageEn' },
+]
+
+function subscriptionHint(type, t) {
+  switch (type) {
+    case 'gold':
+      return t('settings.planGoldHint')
+    case 'silver':
+      return t('settings.planSilverHint')
+    default:
+      return t('settings.planBasicHint')
+  }
+}
 
 export default function SettingsPage() {
   const { currentUser, updateSettings, deleteAccount } = useAuth()
   const { volume, setVolume } = usePlaying()
+  const { t, subscriptionLabel, setLanguage } = useI18n()
   const navigate = useNavigate()
 
   const saved = getUserSettings(currentUser)
   const [notifications, setNotifications] = useState(saved.notifications)
-  const [language, setLanguage] = useState(saved.language)
+  const [language, setLanguageState] = useState(saved.language)
   const [localVolume, setLocalVolume] = useState(saved.volume ?? volume)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -49,7 +45,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const next = getUserSettings(currentUser)
     setNotifications(next.notifications)
-    setLanguage(next.language)
+    setLanguageState(next.language)
     setLocalVolume(next.volume)
     setVolume(next.volume)
   }, [currentUser])
@@ -63,20 +59,21 @@ export default function SettingsPage() {
     setNotifications(value)
     const result = updateSettings({ notifications: value })
     if (!result.ok) {
-      setError(result.error || 'ذخیره انجام نشد.')
+      setError(result.error || t('settings.saveFailed'))
       return
     }
-    flashOk('محدودیت اعلان‌ها ذخیره شد.')
+    flashOk(t('settings.notifSaved'))
   }
 
   function saveLanguage(value) {
+    setLanguageState(value)
     setLanguage(value)
     const result = updateSettings({ language: value })
     if (!result.ok) {
-      setError(result.error || 'ذخیره انجام نشد.')
+      setError(result.error || t('settings.saveFailed'))
       return
     }
-    flashOk(value === 'en' ? 'Language updated.' : 'زبان سامانه به‌روز شد.')
+    flashOk(t('settings.languageSaved'))
   }
 
   function handleVolumeChange(value) {
@@ -88,10 +85,10 @@ export default function SettingsPage() {
   function commitVolume() {
     const result = updateSettings({ volume: localVolume })
     if (!result.ok) {
-      setError(result.error || 'ذخیره صدا انجام نشد.')
+      setError(result.error || t('settings.volumeSaveFailed'))
       return
     }
-    flashOk('صدای سامانه ذخیره شد.')
+    flashOk(t('settings.volumeSaved'))
   }
 
   function handleDeleteAccount() {
@@ -99,7 +96,7 @@ export default function SettingsPage() {
     const result = deleteAccount()
     setDeleting(false)
     if (!result.ok) {
-      setError(result.error || 'حذف حساب انجام نشد.')
+      setError(result.error || t('settings.deleteFailed'))
       setConfirmDelete(false)
       return
     }
@@ -110,8 +107,8 @@ export default function SettingsPage() {
     <div className="settings">
       <header className="settings__header">
         <div>
-          <h1>تنظیمات برنامه</h1>
-          <p>اعلان‌ها، صدا، زبان و مدیریت حساب</p>
+          <h1>{t('settings.title')}</h1>
+          <p>{t('settings.subtitle')}</p>
         </div>
       </header>
 
@@ -120,12 +117,14 @@ export default function SettingsPage() {
 
       <section className="settings__card">
         <div className="settings__card-head">
-          <h2>محدودیت اعلان‌ها</h2>
+          <h2>{t('settings.notifications')}</h2>
         </div>
-        <p className="settings__hint">
-          مشخص کنید کدام اعلان‌ها برای شما نمایش داده شوند.
-        </p>
-        <div className="settings__options" role="radiogroup" aria-label="محدودیت اعلان‌ها">
+        <p className="settings__hint">{t('settings.notificationsHint')}</p>
+        <div
+          className="settings__options"
+          role="radiogroup"
+          aria-label={t('settings.notifications')}
+        >
           {NOTIFICATION_OPTIONS.map((option) => (
             <label key={option.value} className="settings__option">
               <input
@@ -135,7 +134,7 @@ export default function SettingsPage() {
                 checked={notifications === option.value}
                 onChange={() => saveNotifications(option.value)}
               />
-              <span>{option.label}</span>
+              <span>{t(option.labelKey)}</span>
             </label>
           ))}
         </div>
@@ -143,14 +142,14 @@ export default function SettingsPage() {
 
       <section className="settings__card">
         <div className="settings__card-head">
-          <h2>صدای سامانه</h2>
+          <h2>{t('settings.volume')}</h2>
           <span className="settings__volume-value" dir="ltr">
             {localVolume}%
           </span>
         </div>
-        <p className="settings__hint">بلندی صدای پخش و اعلان‌های سامانه را تنظیم کنید.</p>
+        <p className="settings__hint">{t('settings.volumeHint')}</p>
         <label className="settings__range">
-          <span className="settings__sr-only">میزان صدا</span>
+          <span className="settings__sr-only">{t('settings.volumeAria')}</span>
           <input
             type="range"
             min="0"
@@ -171,46 +170,50 @@ export default function SettingsPage() {
 
       <section className="settings__card">
         <div className="settings__card-head">
-          <h2>زبان</h2>
+          <h2>{t('settings.language')}</h2>
         </div>
-        <p className="settings__hint">زبان نمایش رابط کاربری را انتخاب کنید.</p>
-        <label className="settings__field">
-          <span>زبان سامانه</span>
-          <select
-            value={language}
-            onChange={(e) => saveLanguage(e.target.value)}
-          >
-            <option value="fa">فارسی</option>
-            <option value="en">English</option>
-          </select>
-        </label>
+        <p className="settings__hint">{t('settings.languageHint')}</p>
+        <div
+          className="settings__options"
+          role="radiogroup"
+          aria-label={t('settings.language')}
+        >
+          {LANGUAGE_OPTIONS.map((option) => (
+            <label key={option.value} className="settings__option">
+              <input
+                type="radio"
+                name="language"
+                value={option.value}
+                checked={language === option.value}
+                onChange={() => saveLanguage(option.value)}
+              />
+              <span>{t(option.labelKey)}</span>
+            </label>
+          ))}
+        </div>
       </section>
 
       <section className="settings__card">
         <div className="settings__card-head">
-          <h2>نوع اشتراک</h2>
+          <h2>{t('settings.subscription')}</h2>
           <span className={`settings__plan settings__plan--${currentUser.subscription || 'basic'}`}>
             {subscriptionLabel(currentUser.subscription)}
           </span>
         </div>
-        <p className="settings__hint">{subscriptionHint(currentUser.subscription)}</p>
+        <p className="settings__hint">{subscriptionHint(currentUser.subscription, t)}</p>
         <div className="settings__actions">
           <Link to="/payment" className="settings__btn">
-            ارتقا یا تغییر اشتراک
+            {t('settings.upgrade')}
           </Link>
-          <p className="settings__note">
-            پرداخت و تغییر اشتراک در فاز دوم پیاده‌سازی می‌شود؛ فعلاً به صفحه پرداخت هدایت می‌شوید.
-          </p>
+          <p className="settings__note">{t('settings.upgradeNote')}</p>
         </div>
       </section>
 
       <section className="settings__card settings__card--danger">
         <div className="settings__card-head">
-          <h2>حذف حساب کاربری</h2>
+          <h2>{t('settings.deleteTitle')}</h2>
         </div>
-        <p className="settings__hint">
-          با حذف حساب، داده‌های نمایه و پلی‌لیست‌های شما از این مرورگر پاک می‌شود و قابل بازگردانی نیست.
-        </p>
+        <p className="settings__hint">{t('settings.deleteHint')}</p>
         {!confirmDelete ? (
           <button
             type="button"
@@ -221,12 +224,12 @@ export default function SettingsPage() {
               setConfirmDelete(true)
             }}
           >
-            حذف حساب کاربری
+            {t('settings.deleteButton')}
           </button>
         ) : (
           <div className="settings__confirm">
             <p className="settings__confirm-text">
-              مطمئن هستید که می‌خواهید حساب «{currentUser.displayName}» را حذف کنید؟
+              {t('settings.deleteConfirm', { name: currentUser.displayName })}
             </p>
             <div className="settings__form-actions">
               <button
@@ -235,7 +238,7 @@ export default function SettingsPage() {
                 disabled={deleting}
                 onClick={handleDeleteAccount}
               >
-                {deleting ? 'در حال حذف…' : 'بله، حذف شود'}
+                {deleting ? t('settings.deleting') : t('settings.deleteYes')}
               </button>
               <button
                 type="button"
@@ -243,7 +246,7 @@ export default function SettingsPage() {
                 disabled={deleting}
                 onClick={() => setConfirmDelete(false)}
               >
-                انصراف
+                {t('common.cancel')}
               </button>
             </div>
           </div>

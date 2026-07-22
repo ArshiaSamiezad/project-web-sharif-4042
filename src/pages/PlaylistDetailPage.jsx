@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
+import { useI18n } from '../i18n/I18nProvider'
 import PlayingBars from '../components/PlayingBars'
 import AddTracksModal from '../components/AddTracksModal'
 import './PlaylistsPage.css'
@@ -18,6 +19,7 @@ export default function PlaylistDetailPage() {
     toggleTrackInPlaylist,
   } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
+  const { t, formatNumber } = useI18n()
   const navigate = useNavigate()
 
   const [renaming, setRenaming] = useState(false)
@@ -33,7 +35,7 @@ export default function PlaylistDetailPage() {
   }
 
   const tracks = (playlist.trackIds || [])
-    .map((id) => catalog.tracks.find((t) => t.id === id))
+    .map((id) => catalog.tracks.find((track) => track.id === id))
     .filter(Boolean)
 
   function artistPath(artistId) {
@@ -53,7 +55,7 @@ export default function PlaylistDetailPage() {
   }
 
   function handleDelete() {
-    const confirmed = window.confirm(`پلی‌لیست «${playlist.title}» حذف شود؟`)
+    const confirmed = window.confirm(t('playlists.deleteConfirm', { title: playlist.title }))
     if (!confirmed) return
     const result = deletePlaylist(playlist.id)
     if (!result.ok) {
@@ -71,25 +73,25 @@ export default function PlaylistDetailPage() {
   return (
     <div className="catalog album-page playlist-detail">
       <button type="button" className="album-page__back" onClick={() => navigate('/playlists')}>
-        بازگشت به پلی‌لیست‌ها
+        {t('playlists.backToPlaylists')}
       </button>
 
       <header className="album-page__hero">
         <img src={playlist.cover} alt="" className="album-page__cover" />
         <div className="album-page__info">
-          <p className="album-page__eyebrow">پلی‌لیست</p>
+          <p className="album-page__eyebrow">{t('common.playlist')}</p>
           {renaming ? (
             <form className="playlists__rename" onSubmit={handleRename} noValidate>
               <input
                 value={renameTitle}
                 onChange={(event) => setRenameTitle(event.target.value)}
-                aria-label="نام جدید پلی‌لیست"
+                aria-label={t('playlists.renameAria')}
                 autoFocus
               />
               {renameError ? <p className="playlists__error">{renameError}</p> : null}
               <div className="playlists__rename-actions">
                 <button type="submit" className="playlists__btn playlists__btn--primary">
-                  ذخیره
+                  {t('common.save')}
                 </button>
                 <button
                   type="button"
@@ -100,7 +102,7 @@ export default function PlaylistDetailPage() {
                     setRenameError('')
                   }}
                 >
-                  انصراف
+                  {t('common.cancel')}
                 </button>
               </div>
             </form>
@@ -108,7 +110,7 @@ export default function PlaylistDetailPage() {
             <h1>{playlist.title}</h1>
           )}
           <p className="album-page__meta">
-            <span>{tracks.length.toLocaleString('fa-IR')} آهنگ</span>
+            <span>{t('common.trackCount', { count: formatNumber(tracks.length) })}</span>
           </p>
           <div className="playlist-detail__actions">
             <button
@@ -116,7 +118,7 @@ export default function PlaylistDetailPage() {
               className="playlists__btn playlists__btn--accent"
               onClick={() => setAddOpen(true)}
             >
-              افزودن آهنگ
+              {t('playlists.addTracks')}
             </button>
             {!renaming ? (
               <button
@@ -128,7 +130,7 @@ export default function PlaylistDetailPage() {
                   setRenameError('')
                 }}
               >
-                تغییر نام
+                {t('playlists.rename')}
               </button>
             ) : null}
             <button
@@ -136,7 +138,7 @@ export default function PlaylistDetailPage() {
               className="playlists__btn playlists__btn--danger"
               onClick={handleDelete}
             >
-              حذف
+              {t('common.delete')}
             </button>
           </div>
           {actionError ? <p className="playlists__error">{actionError}</p> : null}
@@ -145,13 +147,13 @@ export default function PlaylistDetailPage() {
 
       {tracks.length === 0 ? (
         <div className="playlist-detail__empty">
-          <p>هنوز آهنگی در این لیست نیست.</p>
+          <p>{t('playlists.emptyTracks')}</p>
           <button
             type="button"
             className="playlists__btn playlists__btn--primary"
             onClick={() => setAddOpen(true)}
           >
-            افزودن آهنگ
+            {t('playlists.addTracks')}
           </button>
         </div>
       ) : (
@@ -168,13 +170,17 @@ export default function PlaylistDetailPage() {
                 className={`album-track${isPlaying ? ' is-playing' : ''}`}
               >
                 <span className="album-track__index" aria-hidden="true">
-                  {isPlaying ? <PlayingBars /> : (index + 1).toLocaleString('fa-IR')}
+                  {isPlaying ? <PlayingBars /> : formatNumber(index + 1)}
                 </span>
                 <button
                   type="button"
                   className="album-track__cover"
                   onClick={() => playTrack(track.id)}
-                  aria-label={isPlaying ? `توقف ${track.title}` : `پخش ${track.title}`}
+                  aria-label={
+                    isPlaying
+                      ? t('common.pauseAria', { title: track.title })
+                      : t('common.playAria', { title: track.title })
+                  }
                 >
                   <img src={track.cover} alt="" />
                 </button>
@@ -197,15 +203,15 @@ export default function PlaylistDetailPage() {
                   </p>
                 </div>
                 {isPlaying ? (
-                  <span className="album-track__badge">در حال پخش</span>
+                  <span className="album-track__badge">{t('common.nowPlaying')}</span>
                 ) : null}
                 <button
                   type="button"
                   className="playlists__btn playlists__btn--ghost"
                   onClick={() => handleRemoveTrack(track.id)}
-                  title="حذف از پلی‌لیست"
+                  title={t('playlists.removeFromPlaylist')}
                 >
-                  حذف
+                  {t('common.delete')}
                 </button>
               </li>
             )

@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
 import './PlaylistMenu.css'
 
 export default function PlaylistMenu({ mode, trackId, albumId }) {
   const { getOwnedPlaylists, getPlaylistLimit, toggleTrackInPlaylist, toggleAlbumInPlaylist, getCatalog } =
     useAuth()
+  const { t, formatNumber } = useI18n()
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [tick, setTick] = useState(0)
@@ -41,7 +43,7 @@ export default function PlaylistMenu({ mode, trackId, albumId }) {
   }, [open])
 
   function albumTrackIds() {
-    return catalog.tracks.filter((t) => t.albumId === albumId).map((t) => t.id)
+    return catalog.tracks.filter((track) => track.albumId === albumId).map((track) => track.id)
   }
 
   function isChecked(playlist) {
@@ -62,7 +64,7 @@ export default function PlaylistMenu({ mode, trackId, albumId }) {
       return
     }
 
-    setMessage(result.added ? 'به پلی‌لیست افزوده شد.' : 'از پلی‌لیست حذف شد.')
+    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
     setTick((n) => n + 1)
   }
 
@@ -73,8 +75,8 @@ export default function PlaylistMenu({ mode, trackId, albumId }) {
         className="pl-menu__trigger"
         aria-expanded={open}
         aria-controls={menuId}
-        aria-label="مدیریت پلی‌لیست"
-        title="مدیریت پلی‌لیست"
+        aria-label={t('playlists.menuAria')}
+        title={t('playlists.menuAria')}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
@@ -93,12 +95,12 @@ export default function PlaylistMenu({ mode, trackId, albumId }) {
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
-          <p className="pl-menu__title">پلی‌لیست‌های من</p>
+          <p className="pl-menu__title">{t('playlists.myPlaylists')}</p>
           {playlists.length === 0 ? (
             <p className="pl-menu__empty">
-              هنوز پلی‌لیستی ندارید.
+              {t('playlists.emptyMenu')}
               {Number.isFinite(limit)
-                ? ` (سقف اشتراک شما: ${limit.toLocaleString('fa-IR')} پلی‌لیست)`
+                ? ` ${t('playlists.limitHint', { limit: formatNumber(limit) })}`
                 : null}
             </p>
           ) : (
@@ -126,10 +128,13 @@ export default function PlaylistMenu({ mode, trackId, albumId }) {
           )}
           {Number.isFinite(limit) ? (
             <p className="pl-menu__limit">
-              {playlists.length.toLocaleString('fa-IR')} از {limit.toLocaleString('fa-IR')} پلی‌لیست
+              {t('playlists.menuQuotaFinite', {
+                count: formatNumber(playlists.length),
+                limit: formatNumber(limit),
+              })}
             </p>
           ) : (
-            <p className="pl-menu__limit">پلی‌لیست نامحدود (طلایی)</p>
+            <p className="pl-menu__limit">{t('playlists.menuQuotaInfinite')}</p>
           )}
           {message ? <p className="pl-menu__msg">{message}</p> : null}
         </div>

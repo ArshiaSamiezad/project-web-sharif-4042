@@ -7,6 +7,7 @@ import {
   validateLogin,
   validatePasswordReset,
 } from '../lib/validation'
+import { formatNumber, t } from '../i18n/translations'
 
 const AuthContext = createContext(null)
 
@@ -21,14 +22,6 @@ export function getUserSettings(user) {
     ...DEFAULT_USER_SETTINGS,
     ...(user?.settings || {}),
   }
-}
-
-export function applyDocumentLanguage(language) {
-  const lang = language === 'en' ? 'en' : 'fa'
-  const dir = lang === 'en' ? 'ltr' : 'rtl'
-  document.documentElement.lang = lang
-  document.documentElement.dir = dir
-  document.body.dir = dir
 }
 
 function generateUsername() {
@@ -51,7 +44,6 @@ export function AuthProvider({ children }) {
       const users = storage.getItem('users', [])
       const found = users.find((u) => u.id === sessionId) || null
       setCurrentUser(found)
-      if (found) applyDocumentLanguage(getUserSettings(found).language)
     }
     setReady(true)
   }, [])
@@ -81,18 +73,16 @@ export function AuthProvider({ children }) {
       (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password,
     )
     if (!user) {
-      return { ok: false, error: 'ایمیل یا رمز عبور نادرست است.' }
+      return { ok: false, error: t('errors.invalidCredentials') }
     }
     if (user.role === 'artist' && user.status === 'pending') {
-      return { ok: false, error: 'حساب هنرمند شما در وضعیت «در انتظار تأیید» است.' }
+      return { ok: false, error: t('errors.artistPending') }
     }
     setSession(user)
-    applyDocumentLanguage(getUserSettings(user).language)
     return { ok: true, user }
   }
 
   function logout() {
-    applyDocumentLanguage('fa')
     setSession(null)
   }
 
@@ -106,7 +96,7 @@ export function AuthProvider({ children }) {
     const email = data.email.trim().toLowerCase()
 
     if (users.some((u) => u.email.toLowerCase() === email)) {
-      return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
+      return { ok: false, error: t('errors.emailTaken') }
     }
 
     const user = {
@@ -140,7 +130,7 @@ export function AuthProvider({ children }) {
     const email = data.email.trim().toLowerCase()
 
     if (users.some((u) => u.email.toLowerCase() === email)) {
-      return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
+      return { ok: false, error: t('errors.emailTaken') }
     }
 
     const user = {
@@ -176,8 +166,7 @@ export function AuthProvider({ children }) {
 
     return {
       ok: true,
-      message:
-        'اگر این ایمیل در سامانه ثبت شده باشد، لینک بازیابی رمز ارسال می‌شود.',
+      message: t('errors.resetSent'),
     }
   }
 
@@ -205,7 +194,7 @@ export function AuthProvider({ children }) {
     if (patch.username !== undefined) {
       const nextName = String(patch.username).trim()
       if (isUsernameTaken(nextName, userId)) {
-        return { ok: false, error: 'این نام کاربری قبلاً استفاده شده است.' }
+        return { ok: false, error: t('errors.usernameTaken') }
       }
       patch = { ...patch, username: nextName }
     }
@@ -227,16 +216,13 @@ export function AuthProvider({ children }) {
     const updated = next.find((u) => u.id === userId) || null
     if (currentUser?.id === userId) {
       setCurrentUser(updated)
-      if (patch.settings?.language) {
-        applyDocumentLanguage(patch.settings.language)
-      }
     }
     return { ok: true, user: updated }
   }
 
   function updateSettings(partial) {
     if (!currentUser) {
-      return { ok: false, error: 'برای تغییر تنظیمات وارد شوید.' }
+      return { ok: false, error: t('errors.settingsLoginRequired') }
     }
     return updateUser(currentUser.id, {
       settings: {
@@ -248,12 +234,12 @@ export function AuthProvider({ children }) {
 
   function deleteAccount(userId = currentUser?.id) {
     if (!userId) {
-      return { ok: false, error: 'حساب کاربری پیدا نشد.' }
+      return { ok: false, error: t('errors.accountNotFound') }
     }
 
     const users = getUsers()
     if (!users.some((u) => u.id === userId)) {
-      return { ok: false, error: 'حساب کاربری پیدا نشد.' }
+      return { ok: false, error: t('errors.accountNotFound') }
     }
 
     const nextUsers = users
@@ -271,7 +257,6 @@ export function AuthProvider({ children }) {
     storage.setItem('playlists', playlists)
 
     if (currentUser?.id === userId) {
-      applyDocumentLanguage('fa')
       setSession(null)
     }
     bumpCatalog()
@@ -280,14 +265,14 @@ export function AuthProvider({ children }) {
 
   function toggleFollow(targetId) {
     if (!currentUser || currentUser.id === targetId) {
-      return { ok: false, error: 'امکان دنبال کردن این کاربر وجود ندارد.' }
+      return { ok: false, error: t('errors.cannotFollow') }
     }
 
     const users = getUsers()
     const me = users.find((u) => u.id === currentUser.id)
     const target = users.find((u) => u.id === targetId)
     if (!me || !target) {
-      return { ok: false, error: 'کاربر پیدا نشد.' }
+      return { ok: false, error: t('errors.userNotFound') }
     }
 
     const isFollowing = me.following.includes(targetId)
@@ -334,12 +319,12 @@ export function AuthProvider({ children }) {
 
   function createPlaylist(title) {
     if (!currentUser) {
-      return { ok: false, error: 'برای ساخت پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginCreate') }
     }
 
     const name = String(title ?? '').trim()
     if (!name) {
-      return { ok: false, error: 'نام پلی‌لیست را وارد کنید.' }
+      return { ok: false, error: t('errors.playlistNameRequired') }
     }
 
     const owned = getOwnedPlaylists(currentUser.id)
@@ -347,7 +332,7 @@ export function AuthProvider({ children }) {
     if (Number.isFinite(limit) && owned.length >= limit) {
       return {
         ok: false,
-        error: `سقف اشتراک شما ${limit.toLocaleString('fa-IR')} پلی‌لیست است.`,
+        error: t('errors.playlistLimit', { limit: formatNumber(limit) }),
       }
     }
 
@@ -368,18 +353,18 @@ export function AuthProvider({ children }) {
 
   function renamePlaylist(playlistId, title) {
     if (!currentUser) {
-      return { ok: false, error: 'برای ویرایش پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginEdit') }
     }
 
     const name = String(title ?? '').trim()
     if (!name) {
-      return { ok: false, error: 'نام پلی‌لیست را وارد کنید.' }
+      return { ok: false, error: t('errors.playlistNameRequired') }
     }
 
     const playlists = storage.getItem('playlists', [])
     const playlist = playlists.find((p) => p.id === playlistId)
     if (!playlist || playlist.ownerId !== currentUser.id) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+      return { ok: false, error: t('errors.playlistNotFound') }
     }
 
     const next = playlists.map((p) =>
@@ -392,13 +377,13 @@ export function AuthProvider({ children }) {
 
   function deletePlaylist(playlistId) {
     if (!currentUser) {
-      return { ok: false, error: 'برای حذف پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginDelete') }
     }
 
     const playlists = storage.getItem('playlists', [])
     const playlist = playlists.find((p) => p.id === playlistId)
     if (!playlist || playlist.ownerId !== currentUser.id) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+      return { ok: false, error: t('errors.playlistNotFound') }
     }
 
     storage.setItem(
@@ -411,16 +396,16 @@ export function AuthProvider({ children }) {
 
   function toggleTrackInPlaylist(playlistId, trackId) {
     if (!currentUser) {
-      return { ok: false, error: 'برای مدیریت پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginManage') }
     }
 
     const playlists = storage.getItem('playlists', [])
     const playlist = playlists.find((p) => p.id === playlistId)
     if (!playlist) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+      return { ok: false, error: t('errors.playlistNotFound') }
     }
     if (playlist.ownerId !== currentUser.id) {
-      return { ok: false, error: 'فقط پلی‌لیست‌های خودتان را می‌توانید ویرایش کنید.' }
+      return { ok: false, error: t('errors.playlistOwnedOnly') }
     }
 
     const trackIds = playlist.trackIds || []
@@ -448,13 +433,13 @@ export function AuthProvider({ children }) {
       .map((t) => t.id)
 
     if (albumTrackIds.length === 0) {
-      return { ok: false, error: 'این آلبوم آهنگی ندارد.' }
+      return { ok: false, error: t('errors.albumHasNoTracks') }
     }
 
     const playlists = storage.getItem('playlists', [])
     const playlist = playlists.find((p) => p.id === playlistId)
     if (!playlist || playlist.ownerId !== currentUser?.id) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+      return { ok: false, error: t('errors.playlistNotFound') }
     }
 
     const trackIds = playlist.trackIds || []
