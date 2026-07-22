@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nProvider'
+import { getItem, setItem } from '../lib/storage'
 import PageTransition from '../components/PageTransition'
-import './StaffLayout.css'
+import './AppShell.css'
 
 const BASE_NAV = [
   { to: '/staff/inbox', labelKey: 'staff.navInbox', shortKey: 'staff.navInboxShort', icon: 'inbox' },
@@ -18,9 +20,9 @@ const ADMIN_NAV = [
   },
 ]
 
-function StaffIcon({ name }) {
+function NavIcon({ name }) {
   const props = {
-    className: 'staff-shell__icon',
+    className: 'shell__icon',
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
@@ -54,10 +56,10 @@ function StaffIcon({ name }) {
           <path d="M12 8v8M9.5 10.5h5a2 2 0 0 1 0 4h-5" />
         </svg>
       )
-    case 'app':
+    case 'home':
       return (
         <svg {...props}>
-          <path d="M15 18l-6-6 6-6" />
+          <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z" />
         </svg>
       )
     case 'logout':
@@ -67,28 +69,56 @@ function StaffIcon({ name }) {
           <path d="M14 16l4-4-4-4M18 12H10" />
         </svg>
       )
+    case 'collapse':
+      return (
+        <svg {...props}>
+          <path d="M9 6l-5 6 5 6M20 6l-5 6 5 6" />
+        </svg>
+      )
+    case 'expand':
+      return (
+        <svg {...props}>
+          <path d="M15 6l5 6-5 6M4 6l5 6-5 6" />
+        </svg>
+      )
     default:
       return null
   }
 }
 
 export default function StaffLayout() {
-  const { currentUser, logout, isStaff, isAdmin } = useAuth()
+  const { currentUser, logout, defaultAvatar, isStaff, isAdmin } = useAuth()
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
+  const [collapsed, setCollapsed] = useState(() => Boolean(getItem('sidebarCollapsed', false)))
 
   if (!isStaff(currentUser)) {
     return <Navigate to="/home" replace />
   }
 
-  const navItems = [...BASE_NAV, ...(isAdmin(currentUser) ? ADMIN_NAV : [])]
+  const navItems = [
+    ...BASE_NAV,
+    ...(isAdmin(currentUser) ? ADMIN_NAV : []),
+    { to: '/home', labelKey: 'staff.backToApp', shortKey: 'nav.homeShort', icon: 'home' },
+  ]
+
   const roleLabel =
     currentUser.role === 'admin' ? t('staff.roleAdmin') : t('staff.roleSupport')
+  const expandLabel = collapsed ? t('nav.expand') : t('nav.collapse')
+  const logoutLabel = t('nav.logout')
 
   function handleLogout() {
     logout()
     navigate('/login', { replace: true })
+  }
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev
+      setItem('sidebarCollapsed', next)
+      return next
+    })
   }
 
   function linkClass(item, isActive) {
@@ -97,62 +127,90 @@ export default function StaffLayout() {
       (location.pathname.startsWith('/staff/inbox') ||
         location.pathname.startsWith('/staff/artists') ||
         location.pathname.startsWith('/staff/tickets'))
-    return isActive || inboxActive ? 'staff-shell__link is-active' : 'staff-shell__link'
+    return isActive || inboxActive ? 'shell__link is-active' : 'shell__link'
   }
 
   return (
-    <div className="staff-shell">
-      <aside className="staff-shell__sidebar" aria-label={t('staff.brand')}>
-        <div className="staff-shell__brand">
-          <p className="staff-shell__brand-mark">{t('common.brand')}</p>
-          <h1>{t('staff.brand')}</h1>
-          <p className="staff-shell__role">{roleLabel}</p>
+    <div className={`shell${collapsed ? ' shell--collapsed' : ''}`}>
+      <aside className="shell__sidebar" aria-label={t('staff.brand')}>
+        <div className="shell__sidebar-head">
+          <p className="shell__brand" title={t('common.brand')}>
+            <span className="shell__brand-full">{t('common.brand')}</span>
+            <span className="shell__brand-short" aria-hidden="true">
+              S
+            </span>
+          </p>
+          <button
+            type="button"
+            className="shell__collapse"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={expandLabel}
+            title={expandLabel}
+          >
+            <NavIcon name={collapsed ? 'expand' : 'collapse'} />
+          </button>
         </div>
 
-        <nav className="staff-shell__nav" aria-label={t('staff.title')}>
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => linkClass(item, isActive)}
-            >
-              <StaffIcon name={item.icon} />
-              <span className="staff-shell__link-full">{t(item.labelKey)}</span>
-              <span className="staff-shell__link-short">{t(item.shortKey)}</span>
-            </NavLink>
-          ))}
+        <nav className="shell__nav" aria-label={t('staff.title')}>
+          {navItems.map((item) => {
+            const label = t(item.labelKey)
+            const shortLabel = t(item.shortKey)
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => linkClass(item, isActive)}
+                title={label}
+              >
+                <span className="shell__icon-wrap">
+                  <NavIcon name={item.icon} />
+                </span>
+                <span className="shell__link-label">
+                  <span className="shell__link-label-full">{label}</span>
+                  <span className="shell__link-label-short">{shortLabel}</span>
+                </span>
+              </NavLink>
+            )
+          })}
         </nav>
 
-        <div className="staff-shell__footer">
-          <button
-            type="button"
-            className="staff-shell__link staff-shell__link--action"
-            onClick={() => navigate('/home')}
-          >
-            <StaffIcon name="app" />
-            <span>{t('staff.backToApp')}</span>
-          </button>
-          <button
-            type="button"
-            className="staff-shell__link staff-shell__link--action"
-            onClick={handleLogout}
-          >
-            <StaffIcon name="logout" />
-            <span>{t('nav.logout')}</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          className="shell__logout shell__logout--sidebar"
+          onClick={handleLogout}
+          title={logoutLabel}
+        >
+          <NavIcon name="logout" />
+          <span className="shell__link-label">{logoutLabel}</span>
+        </button>
       </aside>
 
-      <div className="staff-shell__main">
-        <header className="staff-shell__top">
-          <div>
-            <p className="staff-shell__user-name">{currentUser.displayName}</p>
-            <p className="staff-shell__user-meta" dir="ltr">
-              {currentUser.email}
-            </p>
+      <div className="shell__main">
+        <header className="shell__top">
+          <div className="shell__user">
+            <img
+              src={currentUser.avatar || defaultAvatar}
+              alt=""
+              width={44}
+              height={44}
+            />
+            <div>
+              <p className="shell__name">{currentUser.displayName}</p>
+              <span className="shell__badge">{roleLabel}</span>
+            </div>
           </div>
+          <button
+            type="button"
+            className="shell__logout shell__logout--top"
+            onClick={handleLogout}
+            title={logoutLabel}
+          >
+            <NavIcon name="logout" />
+            <span className="shell__link-label">{logoutLabel}</span>
+          </button>
         </header>
-        <div className="staff-shell__page">
+        <div className="shell__page">
           <PageTransition />
         </div>
       </div>
