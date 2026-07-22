@@ -703,7 +703,7 @@ export function AuthProvider({ children }) {
       listeners: 0,
       earlyAccess,
       genre,
-      collaborators,
+      collaborators: [],
     }
 
     const inputTracks = Array.isArray(payload?.tracks) ? payload.tracks : []
@@ -732,7 +732,7 @@ export function AuthProvider({ children }) {
           releasedAt,
           earlyAccess,
           genre,
-          collaborators,
+          collaborators: item?.collaborators,
           lyrics: item?.lyrics,
           audio,
         }),
@@ -776,9 +776,7 @@ export function AuthProvider({ children }) {
       nextPatch.releasedAt = releaseDateFromYear(year)
       delete nextPatch.releaseYear
     }
-    if (nextPatch.collaborators != null) {
-      nextPatch.collaborators = parseCollaborators(nextPatch.collaborators)
-    }
+    delete nextPatch.collaborators
     if (nextPatch.cover != null) {
       nextPatch.cover = String(nextPatch.cover).trim() || album.cover
     }
@@ -787,30 +785,24 @@ export function AuthProvider({ children }) {
     }
 
     const nextAlbums = albums.map((a) =>
-      a.id === albumId ? { ...a, ...nextPatch } : a,
+      a.id === albumId ? { ...a, ...nextPatch, collaborators: [] } : a,
     )
     storage.setItem('albums', nextAlbums)
 
     const syncFields = {}
-    if (nextPatch.title != null) syncFields.albumTitle = nextPatch.title
     if (nextPatch.cover != null) syncFields.cover = nextPatch.cover
     if (nextPatch.earlyAccess != null) syncFields.earlyAccess = nextPatch.earlyAccess
     if (nextPatch.genre != null) syncFields.genre = nextPatch.genre
-    if (nextPatch.collaborators != null) syncFields.collaborators = nextPatch.collaborators
     if (nextPatch.releasedAt != null) syncFields.releasedAt = nextPatch.releasedAt
 
     if (Object.keys(syncFields).length > 0) {
-      const { albumTitle: _ignored, ...trackPatch } = syncFields
-      void _ignored
-      if (Object.keys(trackPatch).length > 0) {
-        const tracks = storage.getItem('tracks', [])
-        storage.setItem(
-          'tracks',
-          tracks.map((tr) =>
-            tr.albumId === albumId ? { ...tr, ...trackPatch } : tr,
-          ),
-        )
-      }
+      const tracks = storage.getItem('tracks', [])
+      storage.setItem(
+        'tracks',
+        tracks.map((tr) =>
+          tr.albumId === albumId ? { ...tr, ...syncFields } : tr,
+        ),
+      )
     }
 
     bumpCatalog()
@@ -944,7 +936,7 @@ export function AuthProvider({ children }) {
       releasedAt: album.releasedAt,
       earlyAccess: album.earlyAccess,
       genre: album.genre || payload?.genre || '',
-      collaborators: payload?.collaborators ?? album.collaborators,
+      collaborators: payload?.collaborators ?? [],
       lyrics: payload?.lyrics,
       audio,
     })

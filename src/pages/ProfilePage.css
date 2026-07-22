@@ -310,6 +310,10 @@
   color: var(--color-text-muted);
 }
 
+.profile__release-genre {
+  color: var(--color-ultimate-grey);
+}
+
 .profile__playing,
 .profile__play-hint {
   position: absolute;

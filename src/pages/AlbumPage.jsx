@@ -10,7 +10,7 @@ export default function AlbumPage() {
   const { albumId } = useParams()
   const { currentUser, getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const navigate = useNavigate()
   const catalog = getCatalog()
 
@@ -27,6 +27,11 @@ export default function AlbumPage() {
     .filter((track) => track.albumId === album.id)
     .filter((track) => isGold || !track.earlyAccess)
     .sort((a, b) => (b.plays || 0) - (a.plays || 0))
+
+  function formatFeat(list) {
+    if (!Array.isArray(list) || list.length === 0) return ''
+    return list.join(language === 'en' ? ', ' : '، ')
+  }
 
   return (
     <div className="catalog album-page">
@@ -46,6 +51,12 @@ export default function AlbumPage() {
             {album.artistName}
           </Link>
           <p className="album-page__meta">
+            {album.genre ? (
+              <>
+                <span>{album.genre}</span>
+                <span>·</span>
+              </>
+            ) : null}
             <span dir="ltr">{album.releasedAt}</span>
             <span>·</span>
             <span>
@@ -66,6 +77,7 @@ export default function AlbumPage() {
         <ul className="album-page__tracks">
           {tracks.map((track, index) => {
             const isPlaying = playingTrackId === track.id
+            const feat = formatFeat(track.collaborators)
             return (
               <li
                 key={track.id}
@@ -94,12 +106,19 @@ export default function AlbumPage() {
                   >
                     {track.title}
                   </button>
-                  <Link
-                    to={artist?.username ? `/profile/${artist.username}` : '/profile'}
-                    className="album-track__artist"
-                  >
-                    {track.artistName}
-                  </Link>
+                  <p className="album-track__artist-row">
+                    <Link
+                      to={artist?.username ? `/profile/${artist.username}` : '/profile'}
+                      className="album-track__artist"
+                    >
+                      {track.artistName}
+                    </Link>
+                    {feat ? (
+                      <span className="album-track__feat">
+                        {t('common.featuring', { names: feat })}
+                      </span>
+                    ) : null}
+                  </p>
                 </div>
                 {isPlaying ? (
                   <span className="album-track__badge">{t('common.nowPlaying')}</span>

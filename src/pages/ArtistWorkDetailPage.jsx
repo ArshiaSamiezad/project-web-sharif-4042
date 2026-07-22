@@ -36,8 +36,9 @@ function yearFromDate(value) {
   return Number.isFinite(y) && y > 0 ? String(y) : String(new Date().getFullYear())
 }
 
-function collaboratorsToText(list) {
-  return Array.isArray(list) ? list.join('، ') : ''
+function collaboratorsToText(list, language = 'fa') {
+  if (!Array.isArray(list) || list.length === 0) return ''
+  return list.join(language === 'en' ? ', ' : '، ')
 }
 
 export default function ArtistWorkDetailPage() {
@@ -56,7 +57,7 @@ export default function ArtistWorkDetailPage() {
     deleteTrack,
     addTrackToAlbum,
   } = useAuth()
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
 
   const verified = isVerifiedArtist(currentUser)
   const catalog = getCatalog()
@@ -73,9 +74,19 @@ export default function ArtistWorkDetailPage() {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({})
   const [addingTrack, setAddingTrack] = useState(false)
-  const [trackDraft, setTrackDraft] = useState({ title: '', lyrics: '', audio: null })
+  const [trackDraft, setTrackDraft] = useState({
+    title: '',
+    lyrics: '',
+    audio: null,
+    collaborators: '',
+  })
   const [editingTrackId, setEditingTrackId] = useState(null)
-  const [trackEdit, setTrackEdit] = useState({ title: '', lyrics: '', audio: null })
+  const [trackEdit, setTrackEdit] = useState({
+    title: '',
+    lyrics: '',
+    audio: null,
+    collaborators: '',
+  })
 
   if (!verified || (!isAlbum && !isSingle)) {
     return <Navigate to="/home" replace />
@@ -101,7 +112,7 @@ export default function ArtistWorkDetailPage() {
       title: work.title || '',
       genre: work.genre || '',
       releaseYear: yearFromDate(work.releasedAt),
-      collaborators: collaboratorsToText(work.collaborators),
+      collaborators: isSingle ? collaboratorsToText(work.collaborators, language) : '',
       cover: work.cover || '',
       earlyAccess: Boolean(work.earlyAccess),
       lyrics: work.lyrics || '',
@@ -139,11 +150,11 @@ export default function ArtistWorkDetailPage() {
       title: draft.title,
       genre: draft.genre,
       releaseYear: draft.releaseYear,
-      collaborators: draft.collaborators,
       cover: draft.cover,
       earlyAccess: draft.earlyAccess,
     }
     if (isSingle) {
+      patch.collaborators = draft.collaborators
       patch.lyrics = draft.lyrics
       if (draft.audio) patch.audio = draft.audio
     }
@@ -179,7 +190,7 @@ export default function ArtistWorkDetailPage() {
       return
     }
     setAddingTrack(false)
-    setTrackDraft({ title: '', lyrics: '', audio: null })
+    setTrackDraft({ title: '', lyrics: '', audio: null, collaborators: '' })
     setNotice(t('works.trackAddedOk'))
   }
 
@@ -189,6 +200,7 @@ export default function ArtistWorkDetailPage() {
       title: track.title || '',
       lyrics: track.lyrics || '',
       audio: track.audio || null,
+      collaborators: collaboratorsToText(track.collaborators, language),
     })
     setError('')
   }
@@ -199,6 +211,7 @@ export default function ArtistWorkDetailPage() {
       title: trackEdit.title,
       lyrics: trackEdit.lyrics,
       audio: trackEdit.audio,
+      collaborators: trackEdit.collaborators,
     })
     if (!result.ok) {
       setError(result.error)
@@ -234,13 +247,21 @@ export default function ArtistWorkDetailPage() {
           </p>
           <h1>{work.title}</h1>
           <p className="works__detail-meta">
-            {[work.genre, yearFromDate(work.releasedAt)]
-              .filter(Boolean)
-              .join(' · ')}
+            {work.genre
+              ? `${t('common.genreLabel')}: ${work.genre}`
+              : t('works.noGenre')}
+            {' · '}
+            {yearFromDate(work.releasedAt)}
           </p>
-          <p className="works__detail-meta">
-            {collaboratorsToText(work.collaborators) || t('works.noCollaborators')}
-          </p>
+          {isSingle ? (
+            <p className="works__detail-meta">
+              {collaboratorsToText(work.collaborators, language)
+                ? t('common.featuring', {
+                    names: collaboratorsToText(work.collaborators, language),
+                  })
+                : t('works.noCollaborators')}
+            </p>
+          ) : null}
           <div className="works__detail-actions">
             {!editing ? (
               <button type="button" className="works__btn works__btn--accent" onClick={startEdit}>
@@ -288,17 +309,21 @@ export default function ArtistWorkDetailPage() {
 
       {editing ? (
         <form className="works__create" onSubmit={handleSave} noValidate>
-          <h2>{t('works.editTitle')}</h2>
+          <h2>{isAlbum ? t('works.editAlbumTitle') : t('works.editSingleTitle')}</h2>
           <div className="works__create-grid">
             <label>
-              <span>{t('works.titleLabel')}</span>
+              <span>
+                {isAlbum ? t('works.albumTitleLabel') : t('works.singleTitleLabel')}
+              </span>
               <input
                 value={draft.title}
                 onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
               />
             </label>
             <label>
-              <span>{t('works.genreLabel')}</span>
+              <span>
+                {isAlbum ? t('works.albumGenreLabel') : t('works.singleGenreLabel')}
+              </span>
               <input
                 value={draft.genre}
                 onChange={(e) => setDraft((prev) => ({ ...prev, genre: e.target.value }))}
@@ -317,18 +342,22 @@ export default function ArtistWorkDetailPage() {
                 dir="ltr"
               />
             </label>
-            <label className="works__span-2">
-              <span>{t('works.collaboratorsLabel')}</span>
-              <input
-                value={draft.collaborators}
-                onChange={(e) =>
-                  setDraft((prev) => ({ ...prev, collaborators: e.target.value }))
-                }
-                placeholder={t('works.collaboratorsPlaceholder')}
-              />
-            </label>
+            {isSingle ? (
+              <label className="works__span-2">
+                <span>{t('works.collaboratorsLabel')}</span>
+                <input
+                  value={draft.collaborators}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, collaborators: e.target.value }))
+                  }
+                  placeholder={t('works.collaboratorsPlaceholder')}
+                />
+              </label>
+            ) : null}
             <label>
-              <span>{t('works.coverLabel')}</span>
+              <span>
+                {isAlbum ? t('works.albumCoverLabel') : t('works.singleCoverLabel')}
+              </span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,.jpg,.jpeg,.png"
@@ -449,6 +478,17 @@ export default function ArtistWorkDetailPage() {
                 </small>
               </label>
               <label>
+                <span>{t('works.trackCollaboratorsLabel')}</span>
+                <input
+                  value={trackDraft.collaborators}
+                  onChange={(e) =>
+                    setTrackDraft((prev) => ({ ...prev, collaborators: e.target.value }))
+                  }
+                  placeholder={t('works.collaboratorsPlaceholder')}
+                />
+                <small>{t('works.collaboratorsHint')}</small>
+              </label>
+              <label>
                 <span>{t('works.lyricsLabel')}</span>
                 <textarea
                   rows={3}
@@ -491,6 +531,19 @@ export default function ArtistWorkDetailPage() {
                           }
                           aria-label={t('works.trackTitleLabel')}
                         />
+                        <label>
+                          <span>{t('works.trackCollaboratorsLabel')}</span>
+                          <input
+                            value={trackEdit.collaborators}
+                            onChange={(e) =>
+                              setTrackEdit((prev) => ({
+                                ...prev,
+                                collaborators: e.target.value,
+                              }))
+                            }
+                            placeholder={t('works.collaboratorsPlaceholder')}
+                          />
+                        </label>
                         <textarea
                           rows={3}
                           value={trackEdit.lyrics}
@@ -537,6 +590,13 @@ export default function ArtistWorkDetailPage() {
                             {formatNumber(trackStats.listeners)} {t('works.listeners')}
                             {' · '}
                             {formatNumber(trackStats.revenue)} {t('works.revenue')}
+                          </p>
+                          <p className="works__detail-meta">
+                            {collaboratorsToText(track.collaborators, language)
+                              ? t('common.featuring', {
+                                  names: collaboratorsToText(track.collaborators, language),
+                                })
+                              : t('works.noCollaborators')}
                           </p>
                           <p className="works__detail-meta">
                             {track.audio

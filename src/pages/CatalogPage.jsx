@@ -16,7 +16,7 @@ function matchesQuery(text, query) {
 export default function CatalogPage() {
   const { currentUser, getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const navigate = useNavigate()
   const catalog = getCatalog()
 
@@ -172,6 +172,9 @@ export default function CatalogPage() {
                         {item.artistName}
                       </Link>
                     </p>
+                    {item.genre ? (
+                      <p className="catalog-card__album">{item.genre}</p>
+                    ) : null}
                     <p className="catalog-card__stat">
                       {t('common.listenerCount', {
                         count: formatNumber(item.listeners || 0),
@@ -236,6 +239,16 @@ export default function CatalogPage() {
                       {item.artistName}
                     </Link>
                   </p>
+                  {item.genre ? (
+                    <p className="catalog-card__album">{item.genre}</p>
+                  ) : null}
+                  {Array.isArray(item.collaborators) && item.collaborators.length > 0 ? (
+                    <p className="catalog-card__album">
+                      {t('common.featuring', {
+                        names: item.collaborators.join(language === 'en' ? ', ' : '، '),
+                      })}
+                    </p>
+                  ) : null}
                   {album ? (
                     <Link to={`/album/${album.id}`} className="catalog-card__album">
                       {album.title}

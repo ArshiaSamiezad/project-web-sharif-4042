@@ -105,6 +105,7 @@ export default function HomePage() {
                   {item.artistName}
                 </Link>
               </p>
+              {item.genre ? <p className="home__tile-meta">{item.genre}</p> : null}
             </article>
           ))}
         </TileRow>
@@ -158,6 +159,7 @@ export default function HomePage() {
                     {item.artistName}
                   </Link>
                 </p>
+                {item.genre ? <p className="home__tile-meta">{item.genre}</p> : null}
               </article>
             )
           })}

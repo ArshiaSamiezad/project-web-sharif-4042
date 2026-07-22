@@ -16,7 +16,13 @@ const AUDIO_TYPES = new Set([
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/jpg'])
 
 function emptyTrackRow() {
-  return { key: `${Date.now()}-${Math.random()}`, title: '', lyrics: '', audio: null }
+  return {
+    key: `${Date.now()}-${Math.random()}`,
+    title: '',
+    lyrics: '',
+    audio: null,
+    collaborators: '',
+  }
 }
 
 function isAudioFile(file) {
@@ -178,12 +184,13 @@ export default function ArtistWorksPage() {
 
   function handlePublish(event) {
     event.preventDefault()
+    const isAlbum = form.releaseType === 'album'
     const payload = {
       releaseType: form.releaseType,
       title: form.title,
       genre: form.genre,
       releaseYear: form.releaseYear,
-      collaborators: form.collaborators,
+      collaborators: isAlbum ? '' : form.collaborators,
       cover: form.cover,
       earlyAccess: form.earlyAccess,
       lyrics: form.lyrics,
@@ -192,6 +199,7 @@ export default function ArtistWorksPage() {
         title: row.title,
         lyrics: row.lyrics,
         audio: row.audio,
+        collaborators: row.collaborators,
       })),
     }
 
@@ -212,6 +220,8 @@ export default function ArtistWorksPage() {
       state: { notice: t('works.publishedOk') },
     })
   }
+
+  const isAlbumForm = form.releaseType === 'album'
 
   return (
     <div className="works">
@@ -289,17 +299,25 @@ export default function ArtistWorksPage() {
             </label>
 
             <label>
-              <span>{t('works.titleLabel')}</span>
+              <span>
+                {isAlbumForm ? t('works.albumTitleLabel') : t('works.singleTitleLabel')}
+              </span>
               <input
                 value={form.title}
                 onChange={(e) => patchForm({ title: e.target.value })}
-                placeholder={t('works.titlePlaceholder')}
+                placeholder={
+                  isAlbumForm
+                    ? t('works.albumTitlePlaceholder')
+                    : t('works.singleTitlePlaceholder')
+                }
                 autoFocus
               />
             </label>
 
             <label>
-              <span>{t('works.genreLabel')}</span>
+              <span>
+                {isAlbumForm ? t('works.albumGenreLabel') : t('works.singleGenreLabel')}
+              </span>
               <input
                 value={form.genre}
                 onChange={(e) => patchForm({ genre: e.target.value })}
@@ -319,18 +337,22 @@ export default function ArtistWorksPage() {
               />
             </label>
 
-            <label className="works__span-2">
-              <span>{t('works.collaboratorsLabel')}</span>
-              <input
-                value={form.collaborators}
-                onChange={(e) => patchForm({ collaborators: e.target.value })}
-                placeholder={t('works.collaboratorsPlaceholder')}
-              />
-              <small>{t('works.collaboratorsHint')}</small>
-            </label>
+            {!isAlbumForm ? (
+              <label className="works__span-2">
+                <span>{t('works.collaboratorsLabel')}</span>
+                <input
+                  value={form.collaborators}
+                  onChange={(e) => patchForm({ collaborators: e.target.value })}
+                  placeholder={t('works.collaboratorsPlaceholder')}
+                />
+                <small>{t('works.collaboratorsHint')}</small>
+              </label>
+            ) : null}
 
             <label>
-              <span>{t('works.coverLabel')}</span>
+              <span>
+                {isAlbumForm ? t('works.albumCoverLabel') : t('works.singleCoverLabel')}
+              </span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,.jpg,.jpeg,.png"
@@ -357,7 +379,7 @@ export default function ArtistWorksPage() {
             </div>
           ) : null}
 
-          {form.releaseType === 'single' ? (
+          {!isAlbumForm ? (
             <div className="works__create-grid">
               <label>
                 <span>{t('works.audioLabel')}</span>
@@ -419,6 +441,17 @@ export default function ArtistWorksPage() {
                         ? t('works.audioFile', { name: row.audio.name })
                         : t('works.audioHint')}
                     </small>
+                  </label>
+                  <label className="works__span-2">
+                    <span>{t('works.trackCollaboratorsLabel')}</span>
+                    <input
+                      value={row.collaborators}
+                      onChange={(e) =>
+                        patchTrackRow(row.key, { collaborators: e.target.value })
+                      }
+                      placeholder={t('works.collaboratorsPlaceholder')}
+                    />
+                    <small>{t('works.collaboratorsHint')}</small>
                   </label>
                   <label className="works__span-2">
                     <span>{t('works.lyricsLabel')}</span>

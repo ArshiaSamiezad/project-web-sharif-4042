@@ -24,7 +24,7 @@ export default function ProfilePage() {
     defaultAvatar,
   } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
-  const { t, formatNumber, subscriptionLabel, genderLabel } = useI18n()
+  const { t, formatNumber, subscriptionLabel, genderLabel, language } = useI18n()
 
   const profile = usernameParam ? getUserByUsername(usernameParam) : currentUser
   const isOwn = Boolean(profile && profile.id === currentUser.id)
@@ -397,6 +397,7 @@ export default function ProfilePage() {
                     >
                       {album.title}
                     </button>
+                    {album.genre ? <p className="profile__release-genre">{album.genre}</p> : null}
                     <p>
                       {t('common.listenerCount', {
                         count: formatNumber(album.listeners || 0),
@@ -452,6 +453,14 @@ export default function ProfilePage() {
                       >
                         {track.title}
                       </button>
+                      {track.genre ? <p className="profile__release-genre">{track.genre}</p> : null}
+                      {Array.isArray(track.collaborators) && track.collaborators.length > 0 ? (
+                        <p className="profile__release-genre">
+                          {t('common.featuring', {
+                            names: track.collaborators.join(language === 'en' ? ', ' : '، '),
+                          })}
+                        </p>
+                      ) : null}
                       <p>
                         {t('common.listenerCount', {
                           count: formatNumber(track.listeners || track.plays || 0),
