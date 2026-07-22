@@ -63,6 +63,13 @@ function NavIcon({ name }) {
           <path d="M8 9h8M8 12h8M8 15h5" />
         </svg>
       )
+    case 'staff':
+      return (
+        <svg {...props}>
+          <path d="M4 19V7a1 1 0 0 1 1-1h6l2 2h6a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+          <path d="M9 14h6M9 11h3" />
+        </svg>
+      )
     case 'profile':
       return (
         <svg {...props}>
@@ -111,8 +118,14 @@ function NavIcon({ name }) {
 }
 
 export default function AppShell() {
-  const { currentUser, logout, defaultAvatar, getUnreadNotificationCount, isVerifiedArtist } =
-    useAuth()
+  const {
+    currentUser,
+    logout,
+    defaultAvatar,
+    getUnreadNotificationCount,
+    isVerifiedArtist,
+    isStaff,
+  } = useAuth()
   const { t, subscriptionLabel, formatNumber } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
@@ -123,6 +136,9 @@ export default function AppShell() {
     ...NAV.slice(0, 3),
     ...(isVerifiedArtist(currentUser)
       ? [{ to: '/artist/works', labelKey: 'nav.works', shortKey: 'nav.worksShort', icon: 'works' }]
+      : []),
+    ...(isStaff(currentUser)
+      ? [{ to: '/staff/inbox', labelKey: 'nav.staff', shortKey: 'nav.staffShort', icon: 'staff' }]
       : []),
     ...NAV.slice(3),
   ]
@@ -145,7 +161,11 @@ export default function AppShell() {
       item.to === '/profile' && location.pathname.startsWith('/profile')
     const worksActive =
       item.to === '/artist/works' && location.pathname.startsWith('/artist/works')
-    return isActive || profileActive || worksActive ? 'shell__link is-active' : 'shell__link'
+    const staffActive =
+      item.to === '/staff/inbox' && location.pathname.startsWith('/staff')
+    return isActive || profileActive || worksActive || staffActive
+      ? 'shell__link is-active'
+      : 'shell__link'
   }
 
   const expandLabel = collapsed ? t('nav.expand') : t('nav.collapse')

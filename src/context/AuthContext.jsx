@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as storage from '../lib/storage'
-import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS } from '../data/seed'
+import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS, DEFAULT_SUBSCRIPTION_PRICES } from '../data/seed'
 import {
   validateArtistSignup,
   validateListenerSignup,
@@ -77,6 +77,9 @@ export function AuthProvider({ children }) {
     }
     if (user.role === 'artist' && user.status === 'pending') {
       return { ok: false, error: t('errors.artistPending') }
+    }
+    if (user.role === 'artist' && user.status === 'rejected') {
+      return { ok: false, error: t('errors.artistRejected') }
     }
     setSession(user)
     return { ok: true, user }
@@ -155,6 +158,25 @@ export function AuthProvider({ children }) {
       settings: { ...DEFAULT_USER_SETTINGS },
     }
     persistUsers([...users, user])
+
+    const staff = users.filter((u) => u.role === 'support' || u.role === 'admin')
+    if (staff.length > 0) {
+      const now = new Date().toISOString()
+      const notifications = storage.getItem('notifications', [])
+      const staffNotes = staff.map((member, index) => ({
+        id: `n-verify-${user.id}-${index}`,
+        userId: member.id,
+        type: 'artist_verification',
+        important: true,
+        params: { artistName: user.artistName },
+        link: `/staff/artists/${user.id}`,
+        createdAt: now,
+        read: false,
+      }))
+      storage.setItem('notifications', [...staffNotes, ...notifications])
+      bumpCatalog()
+    }
+
     return { ok: true, user, pending: true }
   }
 
@@ -1006,6 +1028,306 @@ export function AuthProvider({ children }) {
     return { ok: true }
   }
 
+  function isStaff(user = currentUser) {
+    return Boolean(user && (user.role === 'support' || user.role === 'admin'))
+  }
+
+  function isAdmin(user = currentUser) {
+    return Boolean(user && user.role === 'admin')
+  }
+
+  function isSupport(user = currentUser) {
+    return Boolean(user && user.role === 'support')
+  }
+
+  function requireStaff() {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.staffLoginRequired') }
+    }
+    if (!isStaff(currentUser)) {
+      return { ok: false, error: t('errors.staffOnly') }
+    }
+    return { ok: true }
+  }
+
+  function requireAdmin() {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+    if (!isAdmin(currentUser)) {
+      return { ok: false, error: t('errors.adminOnly') }
+    }
+    return { ok: true }
+  }
+
+  function pushNotification(notification) {
+    const list = storage.getItem('notifications', [])
+    storage.setItem('notifications', [notification, ...list])
+  }
+
+  function getPendingArtists() {
+    void catalogVersion
+    const gate = requireStaff()
+    if (!gate.ok) return []
+    return getUsers()
+      .filter((u) => u.role === 'artist' && u.status === 'pending')
+      .sort((a, b) => String(b.id).localeCompare(String(a.id)))
+  }
+
+  function approveArtist(artistId) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    const users = getUsers()
+    const artist = users.find((u) => u.id === artistId && u.role === 'artist')
+    if (!artist) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+    if (artist.status !== 'pending') {
+      return { ok: false, error: t('errors.artistNotPending') }
+    }
+
+    const artistCode =
+      artist.artistCode || `ART-${String(Date.now()).slice(-6)}`
+    const nextUsers = users.map((u) =>
+      u.id === artistId
+        ? { ...u, status: 'approved', artistCode, samples: u.samples || [] }
+        : u,
+    )
+    persistUsers(nextUsers)
+    if (currentUser?.id === artistId) {
+      setCurrentUser(nextUsers.find((u) => u.id === artistId))
+    }
+
+    pushNotification({
+      id: `n-approved-${artistId}-${Date.now()}`,
+      userId: artistId,
+      type: 'artist_approved',
+      important: true,
+      params: {},
+      link: '/profile',
+      createdAt: new Date().toISOString(),
+      read: false,
+    })
+    bumpCatalog()
+    return { ok: true, user: nextUsers.find((u) => u.id === artistId) }
+  }
+
+  function rejectArtist(artistId, reason) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    const reasonText = String(reason ?? '').trim()
+    if (!reasonText) {
+      return { ok: false, error: t('errors.rejectReasonRequired') }
+    }
+
+    const users = getUsers()
+    const artist = users.find((u) => u.id === artistId && u.role === 'artist')
+    if (!artist) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+    if (artist.status !== 'pending') {
+      return { ok: false, error: t('errors.artistNotPending') }
+    }
+
+    const nextUsers = users.map((u) =>
+      u.id === artistId ? { ...u, status: 'rejected' } : u,
+    )
+    persistUsers(nextUsers)
+
+    pushNotification({
+      id: `n-rejected-${artistId}-${Date.now()}`,
+      userId: artistId,
+      type: 'artist_rejected',
+      important: true,
+      params: { reasonFa: reasonText, reasonEn: reasonText },
+      link: null,
+      createdAt: new Date().toISOString(),
+      read: false,
+    })
+    bumpCatalog()
+    return { ok: true }
+  }
+
+  function getTickets() {
+    void catalogVersion
+    const gate = requireStaff()
+    if (!gate.ok) return []
+    return storage
+      .getItem('tickets', [])
+      .slice()
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  }
+
+  function getTicketById(ticketId) {
+    void catalogVersion
+    return storage.getItem('tickets', []).find((item) => item.id === ticketId) || null
+  }
+
+  function replyToTicket(ticketId, body) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    const text = String(body ?? '').trim()
+    if (!text) {
+      return { ok: false, error: t('errors.ticketReplyRequired') }
+    }
+
+    const tickets = storage.getItem('tickets', [])
+    const ticket = tickets.find((item) => item.id === ticketId)
+    if (!ticket) {
+      return { ok: false, error: t('errors.ticketNotFound') }
+    }
+    if (ticket.status === 'closed') {
+      return { ok: false, error: t('errors.ticketClosed') }
+    }
+
+    const message = {
+      id: `tm-${Date.now()}`,
+      senderId: currentUser.id,
+      senderRole: 'staff',
+      body: text,
+      createdAt: new Date().toISOString(),
+    }
+
+    const next = tickets.map((item) =>
+      item.id === ticketId
+        ? {
+            ...item,
+            status: 'answered',
+            messages: [...(item.messages || []), message],
+          }
+        : item,
+    )
+    storage.setItem('tickets', next)
+    bumpCatalog()
+    return { ok: true, ticket: next.find((item) => item.id === ticketId) }
+  }
+
+  function updateTicketStatus(ticketId, status) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    if (!['open', 'answered', 'closed'].includes(status)) {
+      return { ok: false, error: t('errors.ticketStatusInvalid') }
+    }
+
+    const tickets = storage.getItem('tickets', [])
+    const ticket = tickets.find((item) => item.id === ticketId)
+    if (!ticket) {
+      return { ok: false, error: t('errors.ticketNotFound') }
+    }
+
+    const next = tickets.map((item) =>
+      item.id === ticketId ? { ...item, status } : item,
+    )
+    storage.setItem('tickets', next)
+    bumpCatalog()
+    return { ok: true, ticket: next.find((item) => item.id === ticketId) }
+  }
+
+  function getPayouts() {
+    void catalogVersion
+    const gate = requireStaff()
+    if (!gate.ok) return []
+    return storage
+      .getItem('payouts', [])
+      .slice()
+      .sort((a, b) => String(b.month).localeCompare(String(a.month)))
+  }
+
+  function settlePayout(payoutId) {
+    const gate = requireAdmin()
+    if (!gate.ok) return gate
+
+    const payouts = storage.getItem('payouts', [])
+    const payout = payouts.find((item) => item.id === payoutId)
+    if (!payout) {
+      return { ok: false, error: t('errors.payoutNotFound') }
+    }
+    if (payout.status === 'settled') {
+      return { ok: false, error: t('errors.payoutAlreadySettled') }
+    }
+
+    const next = payouts.map((item) =>
+      item.id === payoutId ? { ...item, status: 'settled' } : item,
+    )
+    storage.setItem('payouts', next)
+
+    pushNotification({
+      id: `n-finance-${payout.artistId}-${Date.now()}`,
+      userId: payout.artistId,
+      type: 'monthly_finance',
+      important: true,
+      params: {
+        year: Number(String(payout.month).slice(0, 4)),
+        month: Number(String(payout.month).slice(5, 7)),
+        amount: payout.rewardAmount,
+      },
+      link: '/profile',
+      createdAt: new Date().toISOString(),
+      read: false,
+    })
+    bumpCatalog()
+    return { ok: true, payout: next.find((item) => item.id === payoutId) }
+  }
+
+  function getSubscriptionPrices() {
+    void catalogVersion
+    return {
+      ...DEFAULT_SUBSCRIPTION_PRICES,
+      ...storage.getItem('subscriptionPrices', DEFAULT_SUBSCRIPTION_PRICES),
+    }
+  }
+
+  function updateSubscriptionPrices({ silver, gold }) {
+    const gate = requireAdmin()
+    if (!gate.ok) return gate
+
+    const silverPrice = Number(silver)
+    const goldPrice = Number(gold)
+    if (!Number.isFinite(silverPrice) || silverPrice < 0) {
+      return { ok: false, error: t('errors.priceInvalid') }
+    }
+    if (!Number.isFinite(goldPrice) || goldPrice < 0) {
+      return { ok: false, error: t('errors.priceInvalid') }
+    }
+
+    const next = {
+      silver: Math.round(silverPrice),
+      gold: Math.round(goldPrice),
+      updatedAt: new Date().toISOString(),
+    }
+    storage.setItem('subscriptionPrices', next)
+    bumpCatalog()
+    return { ok: true, prices: next }
+  }
+
+  function getSubscriptionStats() {
+    void catalogVersion
+    const users = getUsers().filter(
+      (u) => u.role === 'listener' || u.role === 'artist',
+    )
+    const counts = { basic: 0, silver: 0, gold: 0 }
+    users.forEach((u) => {
+      const plan = u.subscription || 'basic'
+      if (plan === 'silver') counts.silver += 1
+      else if (plan === 'gold') counts.gold += 1
+      else counts.basic += 1
+    })
+
+    const prices = getSubscriptionPrices()
+    const monthlyRevenue =
+      counts.silver * (prices.silver || 0) + counts.gold * (prices.gold || 0)
+
+    return {
+      counts,
+      totalUsers: users.length,
+      monthlyRevenue,
+      prices,
+    }
+  }
+
   const value = {
     ready,
     currentUser,
@@ -1040,6 +1362,21 @@ export function AuthProvider({ children }) {
     markNotificationRead,
     markAllNotificationsRead,
     deleteNotification,
+    isStaff,
+    isAdmin,
+    isSupport,
+    getPendingArtists,
+    approveArtist,
+    rejectArtist,
+    getTickets,
+    getTicketById,
+    replyToTicket,
+    updateTicketStatus,
+    getPayouts,
+    settlePayout,
+    getSubscriptionPrices,
+    updateSubscriptionPrices,
+    getSubscriptionStats,
     getUserById,
     getUserByUsername,
     isUsernameTaken,

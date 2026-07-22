@@ -5,6 +5,7 @@ import { I18nProvider } from './i18n/I18nProvider'
 import ProtectedRoute from './components/ProtectedRoute'
 import PageTransition from './components/PageTransition'
 import AppShell from './layouts/AppShell'
+import StaffLayout from './layouts/StaffLayout'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import HomePage from './pages/HomePage'
@@ -18,6 +19,11 @@ import PaymentPage from './pages/PaymentPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ArtistWorksPage from './pages/ArtistWorksPage'
 import ArtistWorkDetailPage from './pages/ArtistWorkDetailPage'
+import StaffInboxPage from './pages/StaffInboxPage'
+import StaffArtistDetailPage from './pages/StaffArtistDetailPage'
+import StaffTicketDetailPage from './pages/StaffTicketDetailPage'
+import StaffFinancePage from './pages/StaffFinancePage'
+import StaffSubscriptionsPage from './pages/StaffSubscriptionsPage'
 
 function AuthLayout({ children }) {
   return <PageTransition variant="auth">{children}</PageTransition>
@@ -46,6 +52,20 @@ export default function App() {
                   </AuthLayout>
                 }
               />
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <StaffLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/staff" element={<Navigate to="/staff/inbox" replace />} />
+                <Route path="/staff/inbox" element={<StaffInboxPage />} />
+                <Route path="/staff/artists/:userId" element={<StaffArtistDetailPage />} />
+                <Route path="/staff/tickets/:ticketId" element={<StaffTicketDetailPage />} />
+                <Route path="/staff/finance" element={<StaffFinancePage />} />
+                <Route path="/staff/subscriptions" element={<StaffSubscriptionsPage />} />
+              </Route>
               <Route
                 element={
                   <ProtectedRoute>

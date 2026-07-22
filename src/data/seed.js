@@ -13,12 +13,18 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 9
+const SEED_VERSION = 10
 
 export const PLAYLIST_LIMITS = {
   basic: 6,
   silver: 100,
   gold: Infinity,
+}
+
+export const DEFAULT_SUBSCRIPTION_PRICES = {
+  silver: 99000,
+  gold: 199000,
+  updatedAt: '2026-07-01T00:00:00.000Z',
 }
 
 const SEED_USERS = [
@@ -78,6 +84,7 @@ const SEED_USERS = [
     username: 'user_artist',
     role: 'artist',
     artistName: 'هنرمند نمونه',
+    artistCode: 'ART-1001',
     bio: 'هنرمند الکترونیک با تمرکز روی فضای شهری و بافت صوتی شبانه. از سال ۱۳۹۸ در حال انتشار تک‌آهنگ و آلبوم در سپتیفای است.',
     subscription: 'basic',
     avatar: null,
@@ -85,6 +92,54 @@ const SEED_USERS = [
     birthDate: null,
     gender: null,
     followers: ['u-listener', 'u-gold'],
+    following: [],
+    dailyStreams: 0,
+    recentPlaylistIds: [],
+  },
+  {
+    id: 'u-pending-1',
+    email: 'pending1@sepatify.test',
+    password: 'password',
+    displayName: 'آوای سپید',
+    username: 'user_avaye',
+    role: 'artist',
+    artistName: 'آوای سپید',
+    artistCode: null,
+    bio: '',
+    samples: [
+      { name: 'sepid-demo.mp3', size: 4200000, type: 'audio/mpeg' },
+      { name: 'sepid-live.wav', size: 18600000, type: 'audio/wav' },
+    ],
+    subscription: 'basic',
+    avatar: null,
+    status: 'pending',
+    birthDate: null,
+    gender: null,
+    followers: [],
+    following: [],
+    dailyStreams: 0,
+    recentPlaylistIds: [],
+  },
+  {
+    id: 'u-pending-2',
+    email: 'pending2@sepatify.test',
+    password: 'password',
+    displayName: 'شب‌گرد',
+    username: 'user_shabgard',
+    role: 'artist',
+    artistName: 'شب‌گرد',
+    artistCode: null,
+    bio: '',
+    samples: [
+      { name: 'night-walk.flac', size: 24100000, type: 'audio/flac' },
+      { name: 'cover-art.png', size: 820000, type: 'image/png' },
+    ],
+    subscription: 'basic',
+    avatar: null,
+    status: 'pending',
+    birthDate: null,
+    gender: null,
+    followers: [],
     following: [],
     dailyStreams: 0,
     recentPlaylistIds: [],
@@ -352,6 +407,99 @@ const SEED_TRACKS = [
   },
 ]
 
+const SEED_TICKETS = [
+  {
+    id: 'T-1042',
+    userId: 'u-listener',
+    userName: 'شنونده نمونه',
+    subject: 'مشکل در پخش پلی‌لیست',
+    status: 'open',
+    createdAt: '2026-07-21T15:10:00.000Z',
+    messages: [
+      {
+        id: 'tm-1042-1',
+        senderId: 'u-listener',
+        senderRole: 'user',
+        body: 'سلام، پلی‌لیست «شب‌های بارانی» برای من پخش نمی‌شود. لطفاً بررسی کنید.',
+        createdAt: '2026-07-21T15:10:00.000Z',
+      },
+    ],
+  },
+  {
+    id: 'T-1038',
+    userId: 'u-silver',
+    userName: 'کاربر نقره‌ای',
+    subject: 'سوال درباره سقف پلی‌لیست',
+    status: 'answered',
+    createdAt: '2026-07-15T09:40:00.000Z',
+    messages: [
+      {
+        id: 'tm-1038-1',
+        senderId: 'u-silver',
+        senderRole: 'user',
+        body: 'با اشتراک نقره‌ای چند پلی‌لیست می‌توانم بسازم؟',
+        createdAt: '2026-07-15T09:40:00.000Z',
+      },
+      {
+        id: 'tm-1038-2',
+        senderId: 'u-support',
+        senderRole: 'staff',
+        body: 'سلام! با اشتراک نقره‌ای می‌توانید تا ۱۰۰ پلی‌لیست بسازید. اگر نیاز به فضای بیشتر دارید، ارتقا به طلایی را در نظر بگیرید.',
+        createdAt: '2026-07-15T11:05:00.000Z',
+      },
+    ],
+  },
+  {
+    id: 'T-1021',
+    userId: 'u-gold',
+    userName: 'کاربر طلایی',
+    subject: 'درخواست بازپرداخت',
+    status: 'closed',
+    createdAt: '2026-07-05T12:00:00.000Z',
+    messages: [
+      {
+        id: 'tm-1021-1',
+        senderId: 'u-gold',
+        senderRole: 'user',
+        body: 'اشتراک طلایی را اشتباه خریده‌ام. امکان بازپرداخت هست؟',
+        createdAt: '2026-07-05T12:00:00.000Z',
+      },
+      {
+        id: 'tm-1021-2',
+        senderId: 'u-admin',
+        senderRole: 'staff',
+        body: 'درخواست شما ثبت شد. طبق سیاست فعلی، بازپرداخت در فاز دوم فعال می‌شود. تیکت را می‌بندیم.',
+        createdAt: '2026-07-06T08:20:00.000Z',
+      },
+    ],
+  },
+]
+
+const SEED_PAYOUTS = [
+  {
+    id: 'pay-1',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    artistCode: 'ART-1001',
+    month: '2026-07',
+    uniqueListeners: 15400,
+    streams: 89420,
+    rewardAmount: 3755640,
+    status: 'pending',
+  },
+  {
+    id: 'pay-2',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    artistCode: 'ART-1001',
+    month: '2026-06',
+    uniqueListeners: 12800,
+    streams: 74210,
+    rewardAmount: 3116820,
+    status: 'settled',
+  },
+]
+
 const SEED_NOTIFICATIONS = [
   // Listener — subscription + followed artist release
   {
@@ -457,7 +605,7 @@ const SEED_NOTIFICATIONS = [
     type: 'new_ticket',
     important: true,
     params: { ticketId: 'T-1042', userName: 'شنونده نمونه' },
-    link: null,
+    link: '/staff/tickets/T-1042',
     createdAt: '2026-07-21T15:20:00.000Z',
     read: false,
   },
@@ -467,7 +615,7 @@ const SEED_NOTIFICATIONS = [
     type: 'artist_verification',
     important: true,
     params: { artistName: 'آوای سپید' },
-    link: null,
+    link: '/staff/artists/u-pending-1',
     createdAt: '2026-07-21T13:00:00.000Z',
     read: false,
   },
@@ -477,7 +625,7 @@ const SEED_NOTIFICATIONS = [
     type: 'new_ticket',
     important: false,
     params: { ticketId: 'T-1038', userName: 'کاربر نقره‌ای' },
-    link: null,
+    link: '/staff/tickets/T-1038',
     createdAt: '2026-07-15T10:00:00.000Z',
     read: true,
   },
@@ -488,7 +636,7 @@ const SEED_NOTIFICATIONS = [
     type: 'artist_verification',
     important: true,
     params: { artistName: 'آوای سپید' },
-    link: null,
+    link: '/staff/artists/u-pending-1',
     createdAt: '2026-07-21T13:05:00.000Z',
     read: false,
   },
@@ -498,7 +646,7 @@ const SEED_NOTIFICATIONS = [
     type: 'new_ticket',
     important: true,
     params: { ticketId: 'T-1042', userName: 'شنونده نمونه' },
-    link: null,
+    link: '/staff/tickets/T-1042',
     createdAt: '2026-07-21T15:25:00.000Z',
     read: false,
   },
@@ -508,7 +656,7 @@ const SEED_NOTIFICATIONS = [
     type: 'artist_verification',
     important: true,
     params: { artistName: 'شب‌گرد' },
-    link: null,
+    link: '/staff/artists/u-pending-2',
     createdAt: '2026-07-12T09:00:00.000Z',
     read: true,
   },
@@ -531,6 +679,9 @@ export function ensureSeedData(storage) {
   storage.setItem('albums', SEED_ALBUMS)
   storage.setItem('tracks', SEED_TRACKS)
   storage.setItem('notifications', SEED_NOTIFICATIONS)
+  storage.setItem('tickets', SEED_TICKETS)
+  storage.setItem('payouts', SEED_PAYOUTS)
+  storage.setItem('subscriptionPrices', DEFAULT_SUBSCRIPTION_PRICES)
   storage.setItem('seeded', true)
   storage.setItem('seedVersion', SEED_VERSION)
 }
