@@ -1,0 +1,127 @@
+/* Developer: Moeid Nadi - 402106683 */
+
+.queue-list__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 899;
+}
+
+.queue-list {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  inset-inline-end: 0;
+  z-index: 900;
+  width: 20rem;
+  max-width: 85vw;
+  max-height: 24rem;
+  overflow-y: auto;
+  border-radius: 0.7rem;
+  border: 1px solid var(--color-stroke);
+  background: color-mix(in srgb, var(--color-bg-deep) 94%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+  animation: queue-list-in 0.16s ease;
+}
+
+@keyframes queue-list-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.queue-list__header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--color-bg-deep) 94%, transparent);
+  border-bottom: 1px solid var(--color-stroke);
+}
+
+.queue-list__title {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.queue-list__count {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.queue-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+.queue-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 1rem;
+  transition: background 0.15s ease;
+}
+
+.queue-list__item:hover {
+  background: var(--color-surface);
+}
+
+.queue-list__cover {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.35rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.queue-list__meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.queue-list__song,
+.queue-list__artist {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-list__song {
+  font-size: 0.82rem;
+  color: var(--color-text);
+}
+
+.queue-list__artist {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.queue-list__remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.queue-list__item:hover .queue-list__remove {
+  opacity: 1;
+}
+
+.queue-list__remove:hover {
+  color: var(--color-danger);
+  transform: scale(1.1);
+}

@@ -1,0 +1,82 @@
+/* Developer: Moeid Nadi - 402106683 */
+
+.progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  font-family: var(--font-body);
+}
+
+.progress-bar__time {
+  width: 2.6rem;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.progress-bar__time--start {
+  text-align: end;
+}
+
+.progress-bar__time--end {
+  text-align: start;
+}
+
+.progress-bar__track {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+  background: var(--color-stroke);
+}
+
+.progress-bar__track::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.progress-bar__track::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.progress-bar__track::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-text);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.progress-bar__track:hover::-webkit-slider-thumb,
+.progress-bar__track:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.progress-bar__track::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.progress-bar__track:hover::-moz-range-thumb,
+.progress-bar__track:focus-visible::-moz-range-thumb {
+  opacity: 1;
+}
+
+.progress-bar__track:focus-visible {
+  box-shadow: var(--focus-ring);
+}

@@ -4,7 +4,9 @@ import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nProvider'
 import { getItem, setItem } from '../lib/storage'
 import PageTransition from '../components/PageTransition'
+import MusicPlayer from '../components/player/MusicPlayer'
 import './AppShell.css'
+
 
 const NAV = [
   { to: '/home', labelKey: 'nav.home', shortKey: 'nav.homeShort', end: true, icon: 'home' },
@@ -268,6 +270,10 @@ export default function AppShell() {
           <PageTransition />
         </div>
       </div>
+
+      <MusicPlayer />
     </div>
   )
 }
+
+

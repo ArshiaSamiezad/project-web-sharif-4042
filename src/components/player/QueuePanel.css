@@ -1,0 +1,157 @@
+/* Developer: Moeid Nadi - 402106683 */
+
+.queue-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--color-bg-deep) 97%, transparent);
+  backdrop-filter: blur(24px);
+  animation: queue-panel-in 0.2s ease;
+}
+
+@keyframes queue-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.queue-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 1.5rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--color-stroke);
+}
+
+.queue-panel__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.queue-panel__close {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.queue-panel__close:hover {
+  color: var(--color-text);
+}
+
+.queue-panel__close:active {
+  transform: scale(0.92);
+}
+
+.queue-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.queue-panel__section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.queue-panel__section-label--active {
+  color: var(--color-illuminating);
+}
+
+.queue-panel__now {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.queue-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.queue-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.queue-panel__cover {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.4rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.queue-panel__meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.queue-panel__song,
+.queue-panel__artist {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-panel__song {
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.queue-panel__song--active {
+  color: var(--color-illuminating);
+  font-weight: 700;
+}
+
+.queue-panel__artist {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.queue-panel__remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.queue-panel__item:hover .queue-panel__remove {
+  opacity: 1;
+}
+
+.queue-panel__remove:hover {
+  color: var(--color-danger);
+  transform: scale(1.1);
+}
+
+.queue-panel__empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-top: 2.5rem;
+}
