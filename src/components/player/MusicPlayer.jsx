@@ -1,6 +1,6 @@
 // Developer: Moeid Nadi - 402106683
 import { useState, useCallback } from "react";
-import { IoVolumeHigh, IoVolumeMute, IoVolumeLow, IoList } from "react-icons/io5";
+import { IoVolumeHigh, IoVolumeMute, IoVolumeLow, IoList, IoCloseSharp } from "react-icons/io5";
 import { usePlaying } from "../../context/PlayingContext";
 import { normalizeTrack } from "../../utils/normalizeTrack";
 import Controls from "./Controls";
@@ -23,26 +23,88 @@ function VolumeIcon({ volume, isMuted, size = 18 }) {
  *
  * Clicking the cover art or track metadata opens FullScreenPlayer — on
  * both desktop and mobile.
+ *
+ * The bar can also be dismissed via a close button. Dismissal plays a
+ * slide-down/fade-out transition before unmounting, and optionally stops
+ * playback. `isDismissed` is the single source of truth for visibility —
+ * nothing else (re-renders from context updates, playback state changes,
+ * parent re-renders) is allowed to flip it back to false. It only resets
+ * when a genuinely new track is selected (see track-id check below).
  */
 export default function MusicPlayer() {
   const player = usePlaying();
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isVolumeHovering, setIsVolumeHovering] = useState(false);
+  // Single source of truth for visibility. Stores the id of the track that
+  // was dismissed (or null if nothing was dismissed) rather than a plain
+  // boolean — this way, if the user picks a genuinely different track later,
+  // the bar comes back for THAT track, but nothing about a parent re-render,
+  // a context update, or playback pausing/stopping can silently flip this
+  // back to "visible" for the track that was just dismissed.
+  const [dismissedTrackId, setDismissedTrackId] = useState(null);
+  const [isHiding, setIsHiding] = useState(false);
+
+  const track = normalizeTrack(player?.currentTrack);
+  const trackId = track?.id ?? track?.trackId ?? track?.title;
+  const isDismissed = dismissedTrackId !== null && dismissedTrackId === trackId;
 
   const handleVolumeChange = useCallback(
     (e) => player.changeVolume(Number(e.target.value)),
     [player]
   );
 
-  const track = normalizeTrack(player?.currentTrack);
-  if (!track) return null;
+  const handleDismiss = useCallback(
+    (e) => {
+      // Stop the click from bubbling up to any parent handler (e.g. a
+      // track-row click, a shell-level listener) that could otherwise
+      // trigger unrelated state updates/re-renders at the same time.
+      e.stopPropagation();
+
+      // Only trigger the slide-down/fade-out here. We deliberately do NOT
+      // set dismissedTrackId yet — that happens in handleTransitionEnd,
+      // once the animation has actually finished. This keeps the bar
+      // mounted (and thus able to keep animating) for the duration of
+      // the transition, no matter what else re-renders in the meantime.
+      setIsHiding(true);
+
+      // Stop/pause audio playback when the bar is dismissed. This may
+      // cause the parent/context to re-render — that's fine, since
+      // visibility is now driven only by isHiding/dismissedTrackId,
+      // neither of which this re-render can touch.
+      if (typeof player.stopPlayback === "function") {
+        player.stopPlayback();
+      } else if (typeof player.pause === "function") {
+        player.pause();
+      } else if (player.isPlaying && typeof player.togglePlay === "function") {
+        player.togglePlay();
+      }
+    },
+    [player]
+  );
+
+  const handleTransitionEnd = useCallback(
+    (e) => {
+      // Only react to the transform/opacity transition on the bar itself,
+      // not on children (e.g. the volume slider thumb) that also transition.
+      if (e.target !== e.currentTarget) return;
+      if (!isHiding) return;
+      // Animation finished — now it's safe to actually unmount.
+      setDismissedTrackId(trackId);
+    },
+    [isHiding, trackId]
+  );
+
+  if (!track || isDismissed) return null;
 
   const volumePercent = player.isMuted ? 0 : player.volume * 100;
 
   return (
     <>
-      <div className="music-player">
+      <div
+        className={`music-player ${isHiding ? "music-player--hiding" : ""}`}
+        onTransitionEnd={handleTransitionEnd}
+      >
         {/* Track info — click cover or metadata to open the full-screen player */}
         <button
           type="button"
@@ -72,7 +134,7 @@ export default function MusicPlayer() {
           <ProgressBar currentTime={player.currentTime} duration={player.duration} onSeek={player.seek} />
         </div>
 
-        {/* Volume + queue (hidden on narrow screens) */}
+        {/* Volume + queue + dismiss (hidden on narrow screens, except dismiss) */}
         <div className="music-player__right">
           <button
             type="button"
@@ -118,6 +180,15 @@ export default function MusicPlayer() {
               onClose={() => setIsQueueOpen(false)}
             />
           </div>
+
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label="بستن پخش‌کننده"
+            className="music-player__icon-btn music-player__dismiss"
+          >
+            <IoCloseSharp size={20} />
+          </button>
         </div>
 
         {/* Compact play/pause shortcut — only visible in the mini-player layout */}
@@ -128,6 +199,16 @@ export default function MusicPlayer() {
           className="music-player__mini-play"
         >
           <PlayPauseGlyph isPlaying={player.isPlaying} />
+        </button>
+
+        {/* Compact dismiss shortcut — only visible in the mini-player layout */}
+        <button
+          type="button"
+          onClick={(e) => handleDismiss(e)}
+          aria-label="بستن پخش‌کننده"
+          className="music-player__mini-dismiss"
+        >
+          <IoCloseSharp size={16} />
         </button>
       </div>
 

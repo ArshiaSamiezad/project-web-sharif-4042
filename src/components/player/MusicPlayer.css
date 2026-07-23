@@ -16,6 +16,16 @@
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   border-top: 1px solid var(--color-stroke);
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.35);
+  opacity: 1;
+  transform: translateY(0);
+  transition: transform 0.28s ease, opacity 0.24s ease;
+}
+
+/* Applied right before unmount — slides the bar down while fading it out. */
+.music-player--hiding {
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
 }
 
 .music-player__track-btn {
@@ -111,6 +121,15 @@
   color: var(--color-illuminating);
 }
 
+/* Dismiss button gets a subtle visual separation + hover-danger tint */
+.music-player__dismiss {
+  margin-inline-start: 0.25rem;
+}
+
+.music-player__dismiss:hover {
+  color: var(--color-text);
+}
+
 .music-player__volume-track {
   width: 6rem;
   height: 4px;
@@ -175,10 +194,14 @@
   display: none;
 }
 
+.music-player__mini-dismiss {
+  display: none;
+}
+
 /* --- Mobile: collapse to a mini-player, sitting just above the bottom nav --- */
 @media (max-width: 860px) {
   .music-player {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
     height: var(--shell-bottom-bar-height, 4.35rem);
     bottom: var(--shell-bottom-bar-height, 4.35rem);
     padding-inline: 0.75rem;
@@ -213,6 +236,24 @@
 
   .music-player__mini-play:active {
     transform: scale(0.92);
+  }
+
+  .music-player__mini-dismiss {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .music-player__mini-dismiss:active {
+    transform: scale(0.9);
   }
 }
 
