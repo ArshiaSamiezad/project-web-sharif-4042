@@ -39,6 +39,7 @@
   height: 4px;
   border-radius: 999px;
   background: transparent;
+  direction: ltr
 }
 
 .progress-bar__track::-moz-range-track {
@@ -55,11 +56,13 @@
   background: var(--color-text);
   opacity: 0;
   transition: opacity 0.15s ease;
+  direction: ltr
 }
 
 .progress-bar__track:hover::-webkit-slider-thumb,
 .progress-bar__track:focus-visible::-webkit-slider-thumb {
   opacity: 1;
+  direction: ltr
 }
 
 .progress-bar__track::-moz-range-thumb {

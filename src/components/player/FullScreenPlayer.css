@@ -247,6 +247,7 @@
   height: 4px;
   border-radius: 999px;
   background: transparent;
+  direction: ltr
 }
 
 .full-screen-player__volume-track::-moz-range-track {
@@ -263,10 +264,12 @@
   background: var(--color-text);
   opacity: 0;
   transition: opacity 0.15s ease;
+  direction: ltr
 }
 
 .full-screen-player__volume-track:hover::-webkit-slider-thumb {
   opacity: 1;
+  direction: ltr
 }
 
 .full-screen-player__volume-track::-moz-range-thumb {

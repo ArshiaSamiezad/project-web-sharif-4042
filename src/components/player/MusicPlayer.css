@@ -126,12 +126,14 @@
   height: 4px;
   border-radius: 999px;
   background: transparent;
+  direction: ltr
 }
 
 .music-player__volume-track::-moz-range-track {
   height: 4px;
   border-radius: 999px;
   background: transparent;
+  direction: ltr
 }
 
 .music-player__volume-track::-webkit-slider-thumb {
@@ -142,10 +144,13 @@
   background: var(--color-text);
   opacity: 0;
   transition: opacity 0.15s ease;
+  direction: ltr
 }
 
 .music-player__volume-track:hover::-webkit-slider-thumb {
   opacity: 1;
+  direction: ltr
+
 }
 
 .music-player__volume-track::-moz-range-thumb {
