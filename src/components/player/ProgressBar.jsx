@@ -32,7 +32,7 @@ export default function ProgressBar({ currentTime = 0, duration = 0, onSeek, cla
   );
 
   return (
-    <div className={`progress-bar ${className}`}>
+    <div className={`progress-bar ${className}`}dir="ltr">
       <span className="progress-bar__time progress-bar__time--start">{formatTime(displayTime)}</span>
 
       <input

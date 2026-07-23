@@ -1,5 +1,5 @@
 // Developer: Moeid Nadi - 402106683
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { IoVolumeHigh, IoVolumeMute, IoVolumeLow, IoList, IoCloseSharp } from "react-icons/io5";
 import { usePlaying } from "../../context/PlayingContext";
 import { normalizeTrack } from "../../utils/normalizeTrack";
@@ -26,28 +26,50 @@ function VolumeIcon({ volume, isMuted, size = 18 }) {
  *
  * The bar can also be dismissed via a close button. Dismissal plays a
  * slide-down/fade-out transition before unmounting, and optionally stops
- * playback. `isDismissed` is the single source of truth for visibility —
- * nothing else (re-renders from context updates, playback state changes,
- * parent re-renders) is allowed to flip it back to false. It only resets
- * when a genuinely new track is selected (see track-id check below).
+ * playback. `isVisible` is the single source of truth for visibility —
+ * nothing but the dismiss button and the track-change effect below is
+ * allowed to touch it, so unrelated re-renders (context updates, playback
+ * state changes, parent re-renders) can't flip it. A `useEffect` watches
+ * the active track's id and resets `isVisible` to true whenever it
+ * changes — whether that's a song picked from an album/playlist, the
+ * queue auto-advancing, or anything else in the app starting playback —
+ * so the bar reliably reappears for the new track even after being
+ * dismissed for a previous one.
  */
 export default function MusicPlayer() {
   const player = usePlaying();
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isVolumeHovering, setIsVolumeHovering] = useState(false);
-  // Single source of truth for visibility. Stores the id of the track that
-  // was dismissed (or null if nothing was dismissed) rather than a plain
-  // boolean — this way, if the user picks a genuinely different track later,
-  // the bar comes back for THAT track, but nothing about a parent re-render,
-  // a context update, or playback pausing/stopping can silently flip this
-  // back to "visible" for the track that was just dismissed.
-  const [dismissedTrackId, setDismissedTrackId] = useState(null);
+  // Single source of truth for visibility. Whether the bar is currently
+  // dismissed. Nothing except the dismiss button (setting it to false) or
+  // the track-change effect below (resetting it to true) is allowed to
+  // touch this — not context updates, not playback state changes, not
+  // parent re-renders.
+  const [isVisible, setIsVisible] = useState(true);
   const [isHiding, setIsHiding] = useState(false);
 
   const track = normalizeTrack(player?.currentTrack);
   const trackId = track?.id ?? track?.trackId ?? track?.title;
-  const isDismissed = dismissedTrackId !== null && dismissedTrackId === trackId;
+
+  // Keep track of the previous track id so the effect below only fires on
+  // an actual change (including the very first track ever loading), not on
+  // unrelated re-renders where trackId happens to be the same value.
+  const prevTrackIdRef = useRef(trackId);
+
+  // Whenever a new track becomes active — whether that's the user clicking
+  // a song in an album/playlist, the queue auto-advancing, or anything else
+  // in the app triggering playback — bring the bar back if it had been
+  // dismissed for a previous track.
+  useEffect(() => {
+    if (trackId !== prevTrackIdRef.current) {
+      prevTrackIdRef.current = trackId;
+      if (trackId != null) {
+        setIsVisible(true);
+        setIsHiding(false);
+      }
+    }
+  }, [trackId]);
 
   const handleVolumeChange = useCallback(
     (e) => player.changeVolume(Number(e.target.value)),
@@ -62,7 +84,7 @@ export default function MusicPlayer() {
       e.stopPropagation();
 
       // Only trigger the slide-down/fade-out here. We deliberately do NOT
-      // set dismissedTrackId yet — that happens in handleTransitionEnd,
+      // set isVisible to false yet — that happens in handleTransitionEnd,
       // once the animation has actually finished. This keeps the bar
       // mounted (and thus able to keep animating) for the duration of
       // the transition, no matter what else re-renders in the meantime.
@@ -70,8 +92,8 @@ export default function MusicPlayer() {
 
       // Stop/pause audio playback when the bar is dismissed. This may
       // cause the parent/context to re-render — that's fine, since
-      // visibility is now driven only by isHiding/dismissedTrackId,
-      // neither of which this re-render can touch.
+      // visibility is now driven only by isHiding/isVisible, neither of
+      // which this re-render can touch.
       if (typeof player.stopPlayback === "function") {
         player.stopPlayback();
       } else if (typeof player.pause === "function") {
@@ -90,12 +112,12 @@ export default function MusicPlayer() {
       if (e.target !== e.currentTarget) return;
       if (!isHiding) return;
       // Animation finished — now it's safe to actually unmount.
-      setDismissedTrackId(trackId);
+      setIsVisible(false);
     },
-    [isHiding, trackId]
+    [isHiding]
   );
 
-  if (!track || isDismissed) return null;
+  if (!track || !isVisible) return null;
 
   const volumePercent = player.isMuted ? 0 : player.volume * 100;
 
