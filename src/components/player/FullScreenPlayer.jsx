@@ -6,6 +6,7 @@ import { IoChevronDown, IoVolumeHigh, IoVolumeLow, IoVolumeMute, IoListSharp } f
 import { FaMicrophone } from "react-icons/fa6";
 import { useAuth } from "../../context/AuthContext";
 import { usePlaying } from "../../context/PlayingContext";
+import { useI18n } from "../../i18n/I18nProvider";
 import { normalizeTrack } from "../../utils/normalizeTrack";
 import Controls from "./Controls";
 import ProgressBar from "./ProgressBar";
@@ -41,6 +42,7 @@ function VolumeIcon({ volume, isMuted, size = 18 }) {
  * @param {() => void} onClose
  */
 export default function FullScreenPlayer({ isOpen, onClose }) {
+  const { t } = useI18n();
   const { currentUser } = useAuth();
   const player = usePlaying();
   const [view, setView] = useState("cover"); // "cover" | "lyrics"
@@ -90,25 +92,25 @@ export default function FullScreenPlayer({ isOpen, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="بستن پخش‌کننده"
+            aria-label={t("player.closePlayer")}
             className="full-screen-player__close"
           >
             <IoChevronDown size={26} />
           </button>
 
           <div className="full-screen-player__from">
-            <p className="full-screen-player__from-label">در حال پخش از آلبوم</p>
+            <p className="full-screen-player__from-label">{t("player.playingFromAlbum")}</p>
             {track.albumId ? (
               <Link
                 to={`/album/${track.albumId}`}
                 onClick={onClose}
                 className="full-screen-player__from-link"
               >
-                {track.albumName ?? "آلبوم نامشخص"}
+                {track.albumName ?? t("player.unknownAlbum")}
               </Link>
             ) : (
               <span className="full-screen-player__from-link full-screen-player__from-link--static">
-                {track.albumName ?? "تک‌آهنگ"}
+                {track.albumName ?? t("common.single")}
               </span>
             )}
           </div>
@@ -142,11 +144,13 @@ export default function FullScreenPlayer({ isOpen, onClose }) {
 
           {isGold && hasStats && (
             <div className="full-screen-player__stats">
-              <span className="full-screen-player__gold-badge">طلایی</span>
+              <span className="full-screen-player__gold-badge">{t("common.subscriptionGold")}</span>
               {track.listenersCount != null && (
-                <span>{formatCount(track.listenersCount)} شنونده ماهانه</span>
+                <span>{t("player.monthlyListeners", { count: formatCount(track.listenersCount) })}</span>
               )}
-              {track.streamsCount != null && <span>· {formatCount(track.streamsCount)} پخش</span>}
+              {track.streamsCount != null && (
+                <span>· {t("player.streams", { count: formatCount(track.streamsCount) })}</span>
+              )}
             </div>
           )}
         </div>
@@ -174,7 +178,7 @@ export default function FullScreenPlayer({ isOpen, onClose }) {
             type="button"
             onClick={() => setView((v) => (v === "lyrics" ? "cover" : "lyrics"))}
             aria-pressed={view === "lyrics"}
-            aria-label="نمایش متن ترانه"
+            aria-label={t("player.showLyrics")}
             className={`full-screen-player__utility-btn ${view === "lyrics" ? "is-active" : ""}`}
           >
             <FaMicrophone size={16} />
@@ -184,7 +188,7 @@ export default function FullScreenPlayer({ isOpen, onClose }) {
             <button
               type="button"
               onClick={player.toggleMute}
-              aria-label="بی‌صدا کردن"
+              aria-label={t("player.mute")}
               className="full-screen-player__utility-btn"
             >
               <VolumeIcon volume={player.volume} isMuted={player.isMuted} />
@@ -204,7 +208,7 @@ export default function FullScreenPlayer({ isOpen, onClose }) {
                   isVolumeHovering ? "var(--color-illuminating)" : "var(--color-text)"
                 } ${volumePercent}%, rgba(255,255,255,0.22) ${volumePercent}%)`,
               }}
-              aria-label="میزان صدا"
+              aria-label={t("player.volume")}
             />
           </div>
 
@@ -212,7 +216,7 @@ export default function FullScreenPlayer({ isOpen, onClose }) {
             type="button"
             onClick={() => setIsQueueOpen(true)}
             aria-pressed={isQueueOpen}
-            aria-label="باز کردن صف پخش"
+            aria-label={t("player.openQueue")}
             className="full-screen-player__utility-btn"
           >
             <IoListSharp size={20} />

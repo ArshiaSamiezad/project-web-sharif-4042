@@ -1,6 +1,7 @@
 // Developer: Moeid Nadi - 402106683
 import { IoChevronDown } from "react-icons/io5";
 import { FaTrash } from "react-icons/fa6";
+import { useI18n } from "../../i18n/I18nProvider";
 import { normalizeTrack } from "../../utils/normalizeTrack";
 import "./QueuePanel.css";
 
@@ -12,11 +13,13 @@ import "./QueuePanel.css";
  * @param {() => void} onClose
  */
 export default function QueuePanel({ currentTrack, queue = [], onRemove, onClose }) {
+  const { t } = useI18n();
+
   return (
     <div className="queue-panel">
       <div className="queue-panel__header">
-        <h2 className="queue-panel__title">صف پخش</h2>
-        <button type="button" onClick={onClose} aria-label="بستن صف" className="queue-panel__close">
+        <h2 className="queue-panel__title">{t("player.queue")}</h2>
+        <button type="button" onClick={onClose} aria-label={t("player.closeQueue")} className="queue-panel__close">
           <IoChevronDown size={22} />
         </button>
       </div>
@@ -24,7 +27,7 @@ export default function QueuePanel({ currentTrack, queue = [], onRemove, onClose
       <div className="queue-panel__body">
         {currentTrack && (
           <>
-            <p className="queue-panel__section-label queue-panel__section-label--active">در حال پخش</p>
+            <p className="queue-panel__section-label queue-panel__section-label--active">{t("common.nowPlaying")}</p>
             <div className="queue-panel__now">
               <img src={currentTrack.coverImage} alt={currentTrack.title} className="queue-panel__cover" />
               <div className="queue-panel__meta">
@@ -37,7 +40,7 @@ export default function QueuePanel({ currentTrack, queue = [], onRemove, onClose
 
         {queue.length > 0 ? (
           <>
-            <p className="queue-panel__section-label">بعدی</p>
+            <p className="queue-panel__section-label">{t("player.nextUp")}</p>
             <ul className="queue-panel__list">
               {queue.map((rawTrack, index) => {
                 const track = normalizeTrack(rawTrack);
@@ -51,7 +54,7 @@ export default function QueuePanel({ currentTrack, queue = [], onRemove, onClose
                     <button
                       type="button"
                       onClick={() => onRemove?.(index)}
-                      aria-label={`حذف ${track.title} از صف`}
+                      aria-label={t("player.removeFromQueue", { title: track.title })}
                       className="queue-panel__remove"
                     >
                       <FaTrash size={13} />
@@ -62,7 +65,7 @@ export default function QueuePanel({ currentTrack, queue = [], onRemove, onClose
             </ul>
           </>
         ) : (
-          <p className="queue-panel__empty">صف پخش خالی است.</p>
+          <p className="queue-panel__empty">{t("player.queueEmpty")}</p>
         )}
       </div>
     </div>

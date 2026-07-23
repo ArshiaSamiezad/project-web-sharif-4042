@@ -1,5 +1,6 @@
 // Developer: Moeid Nadi - 402106683
 import { FaTrash } from "react-icons/fa6";
+import { useI18n } from "../../i18n/I18nProvider";
 import { normalizeTrack } from "../../utils/normalizeTrack";
 import "./QueueList.css";
 
@@ -11,16 +12,18 @@ import "./QueueList.css";
  * @param {() => void} onClose
  */
 export default function QueueList({ queue = [], onRemove, isOpen, onClose }) {
+  const { t } = useI18n();
+
   if (!isOpen || queue.length === 0) return null;
 
   return (
     <>
       <div className="queue-list__backdrop" onClick={onClose} aria-hidden="true" />
 
-      <div role="dialog" aria-label="صف پخش" className="queue-list">
+      <div role="dialog" aria-label={t("player.queue")} className="queue-list">
         <div className="queue-list__header">
-          <h3 className="queue-list__title">بعدی در صف</h3>
-          <span className="queue-list__count">{queue.length} آهنگ</span>
+          <h3 className="queue-list__title">{t("player.nextInQueue")}</h3>
+          <span className="queue-list__count">{t("common.trackCount", { count: queue.length })}</span>
         </div>
 
         <ul className="queue-list__items">
@@ -36,7 +39,7 @@ export default function QueueList({ queue = [], onRemove, isOpen, onClose }) {
                 <button
                   type="button"
                   onClick={() => onRemove?.(index)}
-                  aria-label={`حذف ${track.title} از صف`}
+                  aria-label={t("player.removeFromQueue", { title: track.title })}
                   className="queue-list__remove"
                 >
                   <FaTrash size={13} />

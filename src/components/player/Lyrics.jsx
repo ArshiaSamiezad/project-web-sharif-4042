@@ -1,4 +1,5 @@
 // Developer: Moeid Nadi - 402106683
+import { useI18n } from "../../i18n/I18nProvider";
 import "./Lyrics.css";
 
 /**
@@ -7,10 +8,12 @@ import "./Lyrics.css";
  * @param {string} title
  */
 export default function Lyrics({ lyrics, title }) {
+  const { t } = useI18n();
+
   if (!lyrics || !lyrics.trim()) {
     return (
       <div className="lyrics lyrics--empty">
-        <p>متن ترانه برای «{title}» هنوز موجود نیست.</p>
+        <p>{t("player.noLyricsFor", { title })}</p>
       </div>
     );
   }

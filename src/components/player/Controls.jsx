@@ -1,5 +1,6 @@
 // Developer: Moeid Nadi - 402106683
 import { IoShuffle, IoPlaySkipBack, IoPlay, IoPause, IoPlaySkipForward, IoRepeat } from "react-icons/io5";
+import { useI18n } from "../../i18n/I18nProvider";
 import "./Controls.css";
 
 /**
@@ -20,32 +21,34 @@ export default function Controls({
   onCycleRepeat,
   size = "md",
 }) {
+  const { t } = useI18n();
+
   return (
     <div className={`controls controls--${size}`}>
       <button
         type="button"
         onClick={onToggleShuffle}
         aria-pressed={shuffle}
-        aria-label="پخش تصادفی"
+        aria-label={t("player.shuffle")}
         className={`controls__icon-btn controls__icon-btn--secondary ${shuffle ? "is-active" : ""}`}
       >
         <IoShuffle size={16} />
       </button>
 
-      <button type="button" onClick={onPrev} aria-label="آهنگ قبلی" className="controls__icon-btn">
+      <button type="button" onClick={onPrev} aria-label={t("player.previous")} className="controls__icon-btn">
         <IoPlaySkipForward size={18} />
       </button>
 
       <button
         type="button"
         onClick={onTogglePlay}
-        aria-label={isPlaying ? "توقف پخش" : "پخش"}
+        aria-label={isPlaying ? t("player.pause") : t("player.play")}
         className="controls__play-btn"
       >
         {isPlaying ? <IoPause size={18} /> : <IoPlay size={18} className="controls__play-icon" />}
       </button>
 
-      <button type="button" onClick={onNext} aria-label="آهنگ بعدی" className="controls__icon-btn">
+      <button type="button" onClick={onNext} aria-label={t("player.next")} className="controls__icon-btn">
         <IoPlaySkipBack size={18} />
       </button>
 
@@ -53,7 +56,7 @@ export default function Controls({
         type="button"
         onClick={onCycleRepeat}
         aria-pressed={repeat !== 0}
-        aria-label="حالت تکرار"
+        aria-label={t("player.repeat")}
         className={`controls__icon-btn controls__icon-btn--secondary controls__repeat ${
           repeat !== 0 ? "is-active" : ""
         }`}

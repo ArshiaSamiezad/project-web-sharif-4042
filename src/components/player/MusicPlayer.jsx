@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { IoVolumeHigh, IoVolumeMute, IoVolumeLow, IoList, IoCloseSharp } from "react-icons/io5";
 import { usePlaying } from "../../context/PlayingContext";
+import { useI18n } from "../../i18n/I18nProvider";
 import { normalizeTrack } from "../../utils/normalizeTrack";
 import Controls from "./Controls";
 import ProgressBar from "./ProgressBar";
@@ -37,6 +38,7 @@ function VolumeIcon({ volume, isMuted, size = 18 }) {
  * dismissed for a previous one.
  */
 export default function MusicPlayer() {
+  const { t } = useI18n();
   const player = usePlaying();
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -131,7 +133,7 @@ export default function MusicPlayer() {
         <button
           type="button"
           onClick={() => setIsExpanded(true)}
-          aria-label="نمایش پخش‌کننده تمام‌صفحه"
+          aria-label={t("player.openFullscreen")}
           className="music-player__track-btn"
         >
           <img src={track.coverImage} alt={track.title} className="music-player__cover" />
@@ -161,7 +163,7 @@ export default function MusicPlayer() {
           <button
             type="button"
             onClick={player.toggleMute}
-            aria-label="بی‌صدا کردن"
+            aria-label={t("player.mute")}
             className="music-player__icon-btn"
           >
             <VolumeIcon volume={player.volume} isMuted={player.isMuted} />
@@ -182,7 +184,7 @@ export default function MusicPlayer() {
                 isVolumeHovering ? "var(--color-illuminating)" : "var(--color-text)"
               } ${volumePercent}%, var(--color-stroke) ${volumePercent}%)`,
             }}
-            aria-label="میزان صدا"
+            aria-label={t("player.volume")}
           />
 
           <div className="music-player__queue-wrap">
@@ -190,7 +192,7 @@ export default function MusicPlayer() {
               type="button"
               onClick={() => setIsQueueOpen((o) => !o)}
               aria-pressed={isQueueOpen}
-              aria-label="نمایش صف پخش"
+              aria-label={t("player.showQueue")}
               className={`music-player__icon-btn ${isQueueOpen ? "is-active" : ""}`}
             >
               <IoList size={20} />
@@ -206,7 +208,7 @@ export default function MusicPlayer() {
           <button
             type="button"
             onClick={handleDismiss}
-            aria-label="بستن پخش‌کننده"
+            aria-label={t("player.closePlayer")}
             className="music-player__icon-btn music-player__dismiss"
           >
             <IoCloseSharp size={20} />
@@ -217,7 +219,7 @@ export default function MusicPlayer() {
         <button
           type="button"
           onClick={player.togglePlay}
-          aria-label={player.isPlaying ? "توقف پخش" : "پخش"}
+          aria-label={player.isPlaying ? t("player.pause") : t("player.play")}
           className="music-player__mini-play"
         >
           <PlayPauseGlyph isPlaying={player.isPlaying} />
@@ -227,7 +229,7 @@ export default function MusicPlayer() {
         <button
           type="button"
           onClick={(e) => handleDismiss(e)}
-          aria-label="بستن پخش‌کننده"
+          aria-label={t("player.closePlayer")}
           className="music-player__mini-dismiss"
         >
           <IoCloseSharp size={16} />

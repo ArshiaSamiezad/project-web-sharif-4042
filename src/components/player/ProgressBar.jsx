@@ -1,5 +1,6 @@
 // Developer: Moeid Nadi - 402106683
 import { useState, useCallback } from "react";
+import { useI18n } from "../../i18n/I18nProvider";
 import "./ProgressBar.css";
 
 function formatTime(seconds) {
@@ -16,6 +17,7 @@ function formatTime(seconds) {
  * @param {(time: number) => void} onSeek
  */
 export default function ProgressBar({ currentTime = 0, duration = 0, onSeek, className = "" }) {
+  const { t } = useI18n();
   const [isHovering, setIsHovering] = useState(false);
   const [dragValue, setDragValue] = useState(null);
 
@@ -32,7 +34,7 @@ export default function ProgressBar({ currentTime = 0, duration = 0, onSeek, cla
   );
 
   return (
-    <div className={`progress-bar ${className}`}dir="ltr">
+    <div className={`progress-bar ${className}`} dir="ltr">
       <span className="progress-bar__time progress-bar__time--start">{formatTime(displayTime)}</span>
 
       <input
@@ -52,7 +54,7 @@ export default function ProgressBar({ currentTime = 0, duration = 0, onSeek, cla
             isHovering ? "var(--color-illuminating)" : "var(--color-text)"
           } ${percent}%, var(--color-stroke) ${percent}%)`,
         }}
-        aria-label="جستجوی زمان پخش"
+        aria-label={t("player.seek")}
       />
 
       <span className="progress-bar__time progress-bar__time--end">{formatTime(duration)}</span>
