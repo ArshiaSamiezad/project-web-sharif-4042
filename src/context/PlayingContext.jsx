@@ -94,6 +94,7 @@ export function PlayingProvider({ children }) {
     () => ({
       ...engine,
       // Back-compat field name some pages may already read directly.
+      setVolume: engine.setVolume || engine.changeVolume, // جایگزینی اسم تابع
       playingTrackId: engine.currentTrack?.id ?? null,
       playTrack,
       stopPlayback,

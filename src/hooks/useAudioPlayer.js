@@ -308,7 +308,7 @@ export default function useAudioPlayer(initialPlaylist = []) {
     pause,
     togglePlay,
     seek,
-    changeVolume,
+    setVolume,
     toggleMute,
     playNext,
     playPrevious,
