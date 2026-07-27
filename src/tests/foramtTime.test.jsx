@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { formatTime } from '../lib/formatTime';
-
+vi.mock('../i18n/I18nProvider', () => ({
+  useI18n: () => ({
+    t: (key) => key,
+    locale: 'fa',
+  }),
+}));
 describe('formatTime Function (Original Code)', () => {
   it('formats valid seconds into MM:SS correctly', () => {
     expect(formatTime(125)).toBe('02:05');

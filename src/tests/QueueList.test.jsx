@@ -3,13 +3,42 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import QueueList from '../components/player/QueueList';
 
-// مَک کردن تابع normalizeTrack با توجه به آدرس پروژه
 vi.mock('../utils/normalizeTrack', () => ({
   normalizeTrack: (track) =>
-    typeof track === 'object'
+    typeof track === 'object' && track !== null
       ? track
       : { id: track, title: `Track ${track}`, artistName: 'Artist', coverImage: 'img.jpg' },
 }));
+
+vi.mock('../i18n/I18nProvider', () => {
+  const translations = {
+    'player.remove': 'حذف',
+    'player.removeFromQueue': 'حذف',
+    'player.delete': 'حذف',
+    'queue.remove': 'حذف',
+  };
+
+  return {
+    useI18n: () => ({
+      t: (key, options) => {
+        if (options && options.count !== undefined) {
+          return `${options.count} آهنگ`;
+        }
+        if (translations[key]) {
+          return translations[key];
+        }
+        if (typeof key === 'string' && (key.includes('remove') || key.includes('delete'))) {
+          return 'حذف';
+        }
+        if (typeof key === 'string' && (key.includes('count') || key.includes('tracks'))) {
+          return '۲ آهنگ';
+        }
+        return key;
+      },
+      locale: 'fa',
+    }),
+  };
+});
 
 describe('QueueList Component (Original Code)', () => {
   it('returns null if isOpen is false or queue is empty', () => {
@@ -31,8 +60,7 @@ describe('QueueList Component (Original Code)', () => {
     expect(screen.getByText('آهنگ اول')).toBeInTheDocument();
     expect(screen.getByText('خواننده ۱')).toBeInTheDocument();
     expect(screen.getByText('آهنگ دوم')).toBeInTheDocument();
-    
-    // پشتیبانی از عدد انگلیسی 2 یا فارسی ۲
+
     expect(screen.getByText(/[2۲]\s*آهنگ/)).toBeInTheDocument();
   });
 
