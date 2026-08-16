@@ -1,0 +1,11 @@
+.settings-page { max-width: 760px; margin: 0 auto; padding: 48px 24px 120px; color: var(--color-text, #f5f5f5); }
+.settings-page header { margin-bottom: 28px; }
+.settings-page h1 { margin: 4px 0 8px; font-size: clamp(2rem, 5vw, 3.5rem); }
+.settings-page__eyebrow { color: #b7ff35; font-weight: 700; }
+.settings-card { display: grid; gap: 20px; padding: 28px; border: 1px solid #ffffff20; border-radius: 20px; background: #ffffff0b; }
+.settings-card label:not(.settings-toggle) { display: grid; gap: 8px; }
+.settings-card select { padding: 12px; border: 1px solid #ffffff2b; border-radius: 10px; color: inherit; background: #242526; }
+.settings-toggle { display: flex; align-items: center; gap: 12px; }
+.settings-toggle input { width: 20px; height: 20px; accent-color: #b7ff35; }
+.settings-card button { justify-self: start; border: 0; border-radius: 999px; padding: 12px 22px; font-weight: 800; background: #b7ff35; color: #111; cursor: pointer; }
+.settings-error { color: #ff8f8f; }.settings-success { color: #b7ff35; }

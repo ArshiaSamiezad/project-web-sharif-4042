@@ -7,12 +7,9 @@ import {
   validateLogin,
   validatePasswordReset,
 } from '../lib/validation'
+import * as backend from '../lib/api'
 
 const AuthContext = createContext(null)
-
-function generateUsername() {
-  return `user_${Math.random().toString(36).slice(2, 8)}`
-}
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
@@ -25,13 +22,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     ensureSeedData(storage)
-    const sessionId = storage.getItem('sessionUserId')
-    if (sessionId) {
-      const users = storage.getItem('users', [])
-      const found = users.find((u) => u.id === sessionId) || null
-      setCurrentUser(found)
-    }
-    setReady(true)
+    if (!backend.hasSession()) { setReady(true); return }
+    backend.api('/auth/me/').then(setSession).catch(() => backend.clearSession()).finally(() => setReady(true))
   }, [])
 
   function getUsers() {
@@ -43,125 +35,65 @@ export function AuthProvider({ children }) {
   }
 
   function setSession(user) {
-    setCurrentUser(user)
-    if (user) storage.setItem('sessionUserId', user.id)
-    else storage.removeItem('sessionUserId')
+    setCurrentUser(user ? { followers: [], following: [], dailyStreams: 0, recentPlaylistIds: [], ...user } : null)
   }
 
-  function login(email, password) {
+  async function login(email, password) {
     const validationError = validateLogin({ email, password })
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    const users = getUsers()
-    const user = users.find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password,
-    )
-    if (!user) {
-      return { ok: false, error: 'ایمیل یا رمز عبور نادرست است.' }
-    }
-    if (user.role === 'artist' && user.status === 'pending') {
-      return { ok: false, error: 'حساب هنرمند شما در وضعیت «در انتظار تأیید» است.' }
-    }
-    setSession(user)
-    return { ok: true, user }
+    try { const user = await backend.login(email.trim(), password); setSession(user); return { ok: true, user } }
+    catch (error) { return { ok: false, error: error.message } }
   }
 
-  function logout() {
-    setSession(null)
+  async function logout() {
+    await backend.logout(); setSession(null)
   }
 
-  function registerListener(data) {
+  async function registerListener(data) {
     const validationError = validateListenerSignup(data)
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    const users = getUsers()
-    const email = data.email.trim().toLowerCase()
-
-    if (users.some((u) => u.email.toLowerCase() === email)) {
-      return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
-    }
-
-    const user = {
-      id: `u-${Date.now()}`,
-      email,
-      password: data.password,
-      displayName: data.displayName.trim(),
-      username: generateUsername(),
-      role: 'listener',
-      subscription: 'basic',
-      avatar: null,
-      birthDate: data.birthDate,
-      gender: data.gender,
-      followers: [],
-      following: [],
-      dailyStreams: 0,
-      recentPlaylistIds: [],
-    }
-    persistUsers([...users, user])
-    return { ok: true, user }
+    try { const user = await backend.api('/auth/register/listener/', { method: 'POST', body: data }); return { ok: true, user } }
+    catch (error) { return { ok: false, error: error.message } }
   }
 
-  function registerArtist(data) {
+  async function registerArtist(data) {
     const validationError = validateArtistSignup(data)
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    const users = getUsers()
-    const email = data.email.trim().toLowerCase()
-
-    if (users.some((u) => u.email.toLowerCase() === email)) {
-      return { ok: false, error: 'این ایمیل قبلاً ثبت شده است.' }
-    }
-
-    const user = {
-      id: `u-${Date.now()}`,
-      email,
-      password: data.password,
-      displayName: data.artistName.trim(),
-      username: generateUsername(),
-      role: 'artist',
-      artistName: data.artistName.trim(),
-      samples: data.samples,
-      status: 'pending',
-      bio: '',
-      subscription: 'basic',
-      avatar: null,
-      birthDate: null,
-      gender: null,
-      followers: [],
-      following: [],
-      dailyStreams: 0,
-      recentPlaylistIds: [],
-    }
-    persistUsers([...users, user])
-    return { ok: true, user, pending: true }
+    try {
+      const payload = { ...data, samples: data.samples.map((sample) => sample.name || String(sample)) }
+      const user = await backend.api('/auth/register/artist/', { method: 'POST', body: payload })
+      return { ok: true, user, pending: true }
+    } catch (error) { return { ok: false, error: error.message } }
   }
 
-  function requestPasswordReset(email) {
+  async function requestPasswordReset(email) {
     const validationError = validatePasswordReset({ email })
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    return {
-      ok: true,
-      message:
-        'اگر این ایمیل در سامانه ثبت شده باشد، لینک بازیابی رمز ارسال می‌شود.',
-    }
+    try { await backend.api('/auth/password-reset/', { method: 'POST', body: { email } }); return { ok: true, message: 'اگر این ایمیل در سامانه ثبت شده باشد، لینک بازیابی رمز ارسال می‌شود.' } }
+    catch (error) { return { ok: false, error: error.message } }
   }
 
   function getUserById(userId) {
+    if (currentUser?.id === userId) return currentUser
     return getUsers().find((u) => u.id === userId) || null
   }
 
   function getUserByUsername(username) {
     const key = String(username ?? '').trim().toLowerCase()
     if (!key) return null
+    if (currentUser?.username?.toLowerCase() === key) return currentUser
     return getUsers().find((u) => u.username?.toLowerCase() === key) || null
   }
 
@@ -173,7 +105,11 @@ export function AuthProvider({ children }) {
     )
   }
 
-  function updateUser(userId, patch) {
+  async function updateUser(userId, patch) {
+    if (userId === currentUser?.id) {
+      try { const updated = await backend.api('/auth/me/', { method: 'PATCH', body: patch }); setCurrentUser(updated); return { ok: true, user: updated } }
+      catch (error) { return { ok: false, error: error.message } }
+    }
     const users = getUsers()
 
     if (patch.username !== undefined) {

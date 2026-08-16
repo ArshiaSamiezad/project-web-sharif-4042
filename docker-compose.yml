@@ -1,0 +1,17 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      SQLITE_PATH: /data/db.sqlite3
+      DJANGO_SECRET_KEY: change-this-in-production
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+    volumes:
+      - sqlite_data:/data
+  frontend:
+    build: .
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+volumes:
+  sqlite_data:
