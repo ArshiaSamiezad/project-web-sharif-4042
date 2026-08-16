@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.catalog',
     'apps.playlists',
+    'apps.subscriptions',
 ]
 
 MIDDLEWARE = [
