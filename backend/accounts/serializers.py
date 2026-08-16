@@ -1,9 +1,21 @@
 from django.contrib.auth.password_validation import validate_password
+from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
 from apps.users.models import User as CatalogUser
 from .models import ArtistVerification, User, UserPreference
+
+
+def validate_avatar_reference(value):
+    """Accept either a public URL or a media path returned by the upload API."""
+    if not value or value.startswith("/media/"):
+        return value
+    try:
+        URLValidator(schemes=["http", "https"])(value)
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError("Enter a valid URL.") from exc
+    return value
 
 
 def sync_catalog_user(user, status=None):
@@ -27,7 +39,14 @@ def sync_catalog_user(user, status=None):
 class UserSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name")
     birthDate = serializers.DateField(source="birth_date", allow_null=True, required=False)
-    avatar = serializers.URLField(source="avatar_url", allow_blank=True, required=False)
+    # Uploaded catalog images are represented as same-origin /media/... paths,
+    # while users may also paste a full external URL in the profile form.
+    avatar = serializers.CharField(
+        source="avatar_url",
+        allow_blank=True,
+        required=False,
+        validators=[validate_avatar_reference],
+    )
     status = serializers.SerializerMethodField()
     class Meta:
         model = User
