@@ -22,17 +22,19 @@ export default function HomePage() {
 
   const isGold = currentUser.subscription === 'gold'
 
+  const ownedPlaylists = catalog.playlists.filter((p) => String(p.ownerId) === String(currentUser.id))
   const recentPlaylists = (currentUser.recentPlaylistIds || [])
-    .map((id) => catalog.playlists.find((p) => p.id === id))
-    .filter((p) => p && p.ownerId === currentUser.id)
+    .map((id) => catalog.playlists.find((p) => String(p.id) === String(id)))
+    .filter((p) => p && String(p.ownerId) === String(currentUser.id))
+  const homePlaylists = recentPlaylists.length > 0 ? recentPlaylists : ownedPlaylists
 
   const latestAlbums = [...catalog.albums]
     .filter((a) => isGold || !a.earlyAccess)
-    .sort((a, b) => b.releasedAt.localeCompare(a.releasedAt))
+    .sort((a, b) => String(b.releasedAt).localeCompare(String(a.releasedAt)))
 
   const popularTracks = [...catalog.tracks]
     .filter((track) => !track.earlyAccess)
-    .sort((a, b) => b.plays - a.plays)
+    .sort((a, b) => (b.plays || 0) - (a.plays || 0))
 
   const earlyAccessItems = [
     ...catalog.albums.filter((a) => a.earlyAccess).map((a) => ({ ...a, kind: 'album' })),
@@ -51,7 +53,7 @@ export default function HomePage() {
       <section className="home__section">
         <h2>{t('home.recentPlaylists')}</h2>
         <TileRow>
-          {recentPlaylists.map((item) => (
+          {homePlaylists.map((item) => (
             <article
               key={item.id}
               className="home__tile"

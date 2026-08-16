@@ -30,13 +30,20 @@ def parse_collaborators(value):
     return [text] if text else []
 
 
-def media_url(file_field, request):
+def media_url(file_field, request=None):
     if not file_field:
         return ''
-    url = file_field.url
-    if request is not None:
-        return request.build_absolute_uri(url)
-    return url
+    try:
+        return file_field.url
+    except ValueError:
+        return ''
+
+
+def cover_url(file_field, kind, object_id, request=None):
+    url = media_url(file_field, request)
+    if url:
+        return url
+    return f'https://picsum.photos/seed/sepatify-{kind}-{object_id}/400/400'
 
 
 class AlbumSerializer(serializers.ModelSerializer):
@@ -66,6 +73,16 @@ class AlbumSerializer(serializers.ModelSerializer):
             'trackIds',
         )
         read_only_fields = ('id', 'listeners', 'artistName', 'trackIds')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['cover'] = cover_url(
+            instance.cover,
+            'album',
+            instance.pk,
+            self.context.get('request'),
+        )
+        return data
 
     def get_artistName(self, obj):
         return obj.artist.public_artist_name
@@ -151,19 +168,34 @@ class TrackSerializer(serializers.ModelSerializer):
         return obj.artist.public_artist_name
 
     def get_coverImage(self, obj):
-        return media_url(obj.cover, self.context.get('request'))
+        return cover_url(obj.cover, 'track', obj.pk, self.context.get('request'))
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        url = cover_url(instance.cover, 'track', instance.pk, self.context.get('request'))
+        data['cover'] = url
+        data['coverImage'] = url
+        return data
 
     def get_audio(self, obj):
-        if not obj.audio_name and not obj.audio_file:
-            return None
-        name = obj.audio_name
-        if not name and obj.audio_file:
-            name = obj.audio_file.name.rsplit('/', 1)[-1]
-        return {
-            'name': name,
-            'size': obj.audio_size or getattr(obj.audio_file, 'size', 0) or 0,
-            'type': obj.audio_type or '',
-        }
+        if obj.audio_file:
+            name = obj.audio_name or obj.audio_file.name.rsplit('/', 1)[-1]
+            try:
+                size = obj.audio_file.size
+            except ValueError:
+                size = obj.audio_size or 0
+            return {
+                'name': name,
+                'size': size or obj.audio_size or 0,
+                'type': obj.audio_type or '',
+            }
+        if obj.audio_name or obj.external_audio_url:
+            return {
+                'name': obj.audio_name or 'audio',
+                'size': obj.audio_size or 0,
+                'type': obj.audio_type or '',
+            }
+        return None
 
     def get_audioUrl(self, obj):
         if obj.audio_file:

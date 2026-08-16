@@ -3,6 +3,7 @@ from django.db.models import Max
 from rest_framework import serializers
 
 from apps.catalog.models import Track
+from apps.catalog.serializers import cover_url
 from apps.common.fields import AbsoluteImageField
 from apps.common.uploads import validate_image_file
 from apps.users.models import User
@@ -27,6 +28,16 @@ class PlaylistSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         if self.instance is not None:
             self.fields['ownerId'].read_only = True
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['cover'] = cover_url(
+            instance.cover,
+            'playlist',
+            instance.pk,
+            self.context.get('request'),
+        )
+        return data
 
     def get_trackIds(self, obj):
         return list(
