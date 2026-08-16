@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -9,8 +10,23 @@ from rest_framework.test import APITestCase
 
 from apps.users.models import User
 
-from . import services
+from . import payment, services
 from .models import SubscriptionPlan, Transaction, UserSubscription
+
+
+class FakeProvider:
+    """Test-only provider: deterministic success/failure, injected directly
+    into payment.verify_transaction() so tests don't need to reach into a
+    real (or the development-mock) provider's internals."""
+
+    def __init__(self, success):
+        self._success = success
+
+    def initiate(self, txn):
+        return payment.PaymentInitiationResult(reference_id='FAKE-REF', provider='fake-test', mock=True)
+
+    def verify(self, txn):
+        return payment.PaymentVerificationResult(success=self._success)
 
 
 def make_user(suffix):
@@ -305,3 +321,205 @@ class SubscriptionHistoryAPITests(PlanMixin, APITestCase):
         user = make_user('hist_noside')
         self.client.get(reverse('subscription-history'), {'userId': user.id})
         self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+
+class PurchaseAPITests(PlanMixin, APITestCase):
+    def test_purchase_creates_pending_transaction_with_correct_snapshot(self):
+        user = make_user('purchase_pending')
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': self.silver.id, 'durationMonths': 3},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        txn = Transaction.objects.get(user=user)
+        self.assertEqual(txn.status, Transaction.Status.PENDING)
+        self.assertEqual(txn.amount, self.silver.price_3_months)
+        self.assertEqual(txn.plan_tier_snapshot, SubscriptionPlan.Tier.SILVER)
+        self.assertEqual(txn.duration_months, 3)
+        self.assertEqual(response.data['transaction']['transactionId'], txn.id)
+        self.assertTrue(response.data['payment']['mock'])
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+    def test_price_snapshot_survives_later_plan_price_change(self):
+        user = make_user('purchase_snapshot')
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': self.gold.id, 'durationMonths': 1},
+            format='json',
+        )
+        txn_id = response.data['transaction']['transactionId']
+        original_amount = Transaction.objects.get(pk=txn_id).amount
+
+        self.gold.price_1_month = original_amount + 999999
+        self.gold.save(update_fields=['price_1_month'])
+
+        txn = Transaction.objects.get(pk=txn_id)
+        self.assertEqual(txn.amount, original_amount)
+
+    def test_invalid_duration_creates_no_transaction(self):
+        user = make_user('purchase_bad_duration')
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': self.silver.id, 'durationMonths': 2},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Transaction.objects.filter(user=user).count(), 0)
+
+    def test_invalid_user_creates_no_transaction(self):
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': 999999, 'planId': self.silver.id, 'durationMonths': 1},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(Transaction.objects.count(), 0)
+
+    def test_invalid_plan_creates_no_transaction(self):
+        user = make_user('purchase_bad_plan')
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': 999999, 'durationMonths': 1},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(Transaction.objects.filter(user=user).count(), 0)
+
+    def test_inactive_plan_is_rejected(self):
+        user = make_user('purchase_inactive')
+        self.silver.is_active = False
+        self.silver.save(update_fields=['is_active'])
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': self.silver.id, 'durationMonths': 1},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Transaction.objects.filter(user=user).count(), 0)
+
+    def test_basic_purchase_is_rejected(self):
+        user = make_user('purchase_basic')
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': self.basic.id, 'durationMonths': 1},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Transaction.objects.filter(user=user).count(), 0)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+
+class VerifyTransactionAPITests(PlanMixin, APITestCase):
+    def _purchase(self, user, plan, months):
+        response = self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': plan.id, 'durationMonths': months},
+            format='json',
+        )
+        return response.data['transaction']['transactionId']
+
+    def test_successful_verification_activates_subscription(self):
+        user = make_user('verify_success')
+        txn_id = self._purchase(user, self.silver, 1)
+
+        response = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['transaction']['status'], Transaction.Status.SUCCESS)
+
+        txn = Transaction.objects.get(pk=txn_id)
+        self.assertEqual(txn.status, Transaction.Status.SUCCESS)
+        self.assertIsNotNone(txn.verified_at)
+        self.assertIsNotNone(txn.user_subscription_id)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 1)
+
+        user.refresh_from_db()
+        self.assertEqual(user.subscription, User.Subscription.SILVER)
+
+    def test_failed_verification_does_not_activate(self):
+        user = make_user('verify_fail')
+        txn_id = self._purchase(user, self.silver, 1)
+
+        with patch('apps.subscriptions.payment.get_payment_provider', return_value=FakeProvider(success=False)):
+            response = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        txn = Transaction.objects.get(pk=txn_id)
+        self.assertEqual(txn.status, Transaction.Status.FAILED)
+        self.assertIsNotNone(txn.verified_at)
+        self.assertIsNone(txn.user_subscription_id)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+        user.refresh_from_db()
+        self.assertEqual(user.subscription, User.Subscription.BASIC)
+
+    def test_idempotent_double_verification_creates_one_subscription(self):
+        user = make_user('verify_idempotent')
+        txn_id = self._purchase(user, self.gold, 1)
+
+        self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+        self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 1)
+
+    def test_already_successful_transaction_returns_existing_result(self):
+        user = make_user('verify_already_success')
+        txn_id = self._purchase(user, self.gold, 1)
+
+        first = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+        second = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+
+        self.assertEqual(
+            first.data['transaction']['userSubscription']['id'],
+            second.data['transaction']['userSubscription']['id'],
+        )
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 1)
+
+    def test_verify_nonexistent_transaction_returns_404(self):
+        response = self.client.post(reverse('subscription-verify'), {'transactionId': 999999}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_renewal_through_payment_schedules_after_existing_period(self):
+        user = make_user('verify_renewal')
+        first_txn_id = self._purchase(user, self.silver, 1)
+        self.client.post(reverse('subscription-verify'), {'transactionId': first_txn_id}, format='json')
+        first_sub = UserSubscription.objects.get(user=user)
+
+        second_txn_id = self._purchase(user, self.silver, 1)
+        self.client.post(reverse('subscription-verify'), {'transactionId': second_txn_id}, format='json')
+
+        subs = list(UserSubscription.objects.filter(user=user).order_by('start_date'))
+        self.assertEqual(len(subs), 2)
+        self.assertEqual(subs[1].start_date, first_sub.end_date)
+        self.assertLessEqual(subs[0].end_date, subs[1].start_date)
+
+    def test_plan_change_through_payment_schedules_after_latest_period(self):
+        user = make_user('verify_plan_change')
+        silver_txn_id = self._purchase(user, self.silver, 1)
+        self.client.post(reverse('subscription-verify'), {'transactionId': silver_txn_id}, format='json')
+        silver_sub = UserSubscription.objects.get(user=user, plan=self.silver)
+
+        gold_txn_id = self._purchase(user, self.gold, 3)
+        self.client.post(reverse('subscription-verify'), {'transactionId': gold_txn_id}, format='json')
+        gold_sub = UserSubscription.objects.get(user=user, plan=self.gold)
+
+        self.assertEqual(gold_sub.start_date, silver_sub.end_date)
+
+
+class VerifyTransactionAtomicityTests(PlanMixin, TestCase):
+    def test_activation_failure_leaves_transaction_pending_with_no_orphan_subscription(self):
+        user = make_user('verify_atomic')
+        txn, _initiation = payment.create_pending_transaction(user, self.silver, 1)
+
+        with patch('apps.subscriptions.payment.activate_subscription', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                payment.verify_transaction(txn.id)
+
+        txn.refresh_from_db()
+        self.assertEqual(txn.status, Transaction.Status.PENDING)
+        self.assertIsNone(txn.user_subscription_id)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+        user.refresh_from_db()
+        self.assertEqual(user.subscription, User.Subscription.BASIC)

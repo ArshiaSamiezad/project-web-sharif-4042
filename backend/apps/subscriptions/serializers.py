@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import SubscriptionPlan, UserSubscription
+from .models import SubscriptionPlan, Transaction, UserSubscription
 
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
@@ -48,6 +48,36 @@ class UserSubscriptionHistorySerializer(serializers.ModelSerializer):
         model = UserSubscription
         fields = ('id', 'plan', 'planTier', 'startDate', 'endDate', 'status', 'createdAt')
         read_only_fields = fields
+
+
+class TransactionSerializer(serializers.ModelSerializer):
+    transactionId = serializers.IntegerField(source='id', read_only=True)
+    planTierSnapshot = serializers.CharField(source='plan_tier_snapshot', read_only=True)
+    durationMonths = serializers.IntegerField(source='duration_months', read_only=True)
+    gatewayReferenceId = serializers.CharField(source='gateway_reference_id', read_only=True)
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
+    verifiedAt = serializers.DateTimeField(source='verified_at', read_only=True)
+    userSubscription = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Transaction
+        fields = (
+            'transactionId',
+            'status',
+            'amount',
+            'planTierSnapshot',
+            'durationMonths',
+            'gatewayReferenceId',
+            'createdAt',
+            'verifiedAt',
+            'userSubscription',
+        )
+        read_only_fields = fields
+
+    def get_userSubscription(self, obj):
+        if obj.user_subscription_id is None:
+            return None
+        return UserSubscriptionHistorySerializer(obj.user_subscription).data
 
 
 class CurrentSubscriptionSerializer(serializers.Serializer):
