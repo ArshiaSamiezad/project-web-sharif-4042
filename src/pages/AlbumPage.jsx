@@ -23,10 +23,15 @@ export default function AlbumPage() {
   }
 
   const artist = getUserById(album.artistId)
-  const tracks = catalog.tracks
+  const eligibleTracks = catalog.tracks
     .filter((track) => track.albumId === album.id)
     .filter((track) => isGold || !track.earlyAccess)
-    .sort((a, b) => (b.plays || 0) - (a.plays || 0))
+  const eligibleById = new Map(eligibleTracks.map((track) => [String(track.id), track]))
+  const orderedIds = new Set((album.trackIds || []).map(String))
+  const tracks = [
+    ...(album.trackIds || []).map((id) => eligibleById.get(String(id))).filter(Boolean),
+    ...eligibleTracks.filter((track) => !orderedIds.has(String(track.id))),
+  ]
 
   function formatFeat(list) {
     if (!Array.isArray(list) || list.length === 0) return ''
@@ -89,7 +94,7 @@ export default function AlbumPage() {
                 <button
                   type="button"
                   className="album-track__cover"
-                  onClick={() => playTrack(track.id)}
+                  onClick={() => playTrack(track.id, tracks)}
                   aria-label={
                     isPlaying
                       ? t('common.pauseAria', { title: track.title })
@@ -102,7 +107,7 @@ export default function AlbumPage() {
                   <button
                     type="button"
                     className="album-track__title"
-                    onClick={() => playTrack(track.id)}
+                    onClick={() => playTrack(track.id, tracks)}
                   >
                     {track.title}
                   </button>

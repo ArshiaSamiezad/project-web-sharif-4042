@@ -5,7 +5,8 @@ import useAudioPlayer from '../hooks/useAudioPlayer'
 import { idEq } from '../lib/ids'
 
 const PlayingContext = createContext(null)
-const DEFAULT_VOLUME = 80
+const DEFAULT_VOLUME = 1
+const PLAYBACK_SOURCE_KEY = 'nowPlayingSourceTrackIds'
 
 function withAlbumNames(tracks, albums) {
   const albumTitleById = new Map((albums || []).map((a) => [String(a.id), a.title]))
@@ -17,6 +18,11 @@ function withAlbumNames(tracks, albums) {
           albumName: t.albumId ? albumTitleById.get(String(t.albumId)) ?? null : null,
         },
   )
+}
+
+function hasSameTrackOrder(left, right) {
+  if (left.length !== right.length) return false
+  return left.every((track, index) => idEq(track.id, right[index]?.id))
 }
 
 export function PlayingProvider({ children }) {
@@ -37,26 +43,47 @@ export function PlayingProvider({ children }) {
   }, [engine.currentTrack])
 
   useEffect(() => {
+    if (!engine.currentTrack || !engine.playlist.length) return
+    storage.setItem(
+      PLAYBACK_SOURCE_KEY,
+      engine.playlist.map((track) => track.id),
+    )
+  }, [engine.currentTrack, engine.playlist])
+
+  useEffect(() => {
     if (hasResumedRef.current) return
     if (!catalog.tracks.length) return
     hasResumedRef.current = true
     const savedId = storage.getItem('nowPlayingTrackId', null)
     if (!savedId) return
-    const pool = withAlbumNames(catalog.tracks, catalog.albums)
+    const savedSourceIds = storage.getItem(PLAYBACK_SOURCE_KEY, [])
+    const source = Array.isArray(savedSourceIds)
+      ? savedSourceIds
+          .map((id) => catalog.tracks.find((track) => idEq(track.id, id)))
+          .filter(Boolean)
+      : []
+    const fallbackTrack = catalog.tracks.find((track) => idEq(track.id, savedId))
+    const pool = withAlbumNames(source.length ? source : fallbackTrack ? [fallbackTrack] : [], catalog.albums)
     const track = pool.find((t) => idEq(t.id, savedId))
     if (track) engine.playTrack(track, pool)
   }, [catalog.tracks, catalog.albums, engine])
 
   const playTrack = useCallback((trackId, list) => {
     if (!trackId) return
-    if (idEq(engine.currentTrack?.id, trackId)) {
+    const { tracks, albums } = catalogRef.current
+    const requestedSource = Array.isArray(list)
+      ? list
+      : tracks.filter((track) => idEq(track.id, trackId))
+    const pool = withAlbumNames(requestedSource, albums)
+    const track = pool.find((t) => idEq(t.id, trackId))
+    if (!track) return
+    if (
+      idEq(engine.currentTrack?.id, trackId) &&
+      hasSameTrackOrder(engine.playlist, pool)
+    ) {
       engine.togglePlay()
       return
     }
-    const { tracks, albums } = catalogRef.current
-    const pool = list ? withAlbumNames(list, albums) : withAlbumNames(tracks, albums)
-    const track = pool.find((t) => idEq(t.id, trackId))
-    if (!track) return
     engine.playTrack(track, pool)
   }, [engine])
 
@@ -68,7 +95,7 @@ export function PlayingProvider({ children }) {
   const value = useMemo(
     () => ({
       ...engine,
-      setVolume: engine.setVolume || engine.changeVolume,
+      setVolume: engine.setVolume,
       volume: engine.volume ?? DEFAULT_VOLUME,
       playingTrackId: engine.currentTrack?.id ?? null,
       playTrack,

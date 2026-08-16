@@ -80,7 +80,7 @@ export default function SuggestTracksPanel({ playlistId }) {
       setToast('success')
       await wait(SUCCESS_MS)
       setToast(null)
-    } catch (err) {
+    } catch {
       setError(t('playlists.suggestError'))
       setFetched(true)
       setToast('error')

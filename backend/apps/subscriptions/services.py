@@ -33,6 +33,24 @@ from .models import SubscriptionPlan, UserSubscription
 
 ALLOWED_DURATIONS_MONTHS = (1, 3, 6, 12)
 
+# Basic is an application invariant, not optional catalog data.  Keep the
+# fallback usable even when an old/development database has had its seeded
+# plan rows removed after the original data migration ran.
+BASIC_PLAN_DEFAULTS = {
+    'name': 'Basic',
+    'price_1_month': 0,
+    'price_3_months': 0,
+    'price_6_months': 0,
+    'price_12_months': 0,
+    'daily_stream_limit': 60,
+    'playlist_limit': 6,
+    'can_download': False,
+    'can_upload_profile_photo': False,
+    'has_early_access': False,
+    'has_stats_access': False,
+    'is_active': True,
+}
+
 
 def _add_calendar_months(base_date, months):
     """base_date shifted forward by `months` calendar months (not 30*months days)."""
@@ -55,7 +73,11 @@ def _expire_lapsed_subscriptions(user):
 
 def get_basic_plan():
     """The fallback SubscriptionPlan (tier=basic) every user without a paid plan gets."""
-    return SubscriptionPlan.objects.get(tier=SubscriptionPlan.Tier.BASIC)
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        tier=SubscriptionPlan.Tier.BASIC,
+        defaults=BASIC_PLAN_DEFAULTS,
+    )
+    return plan
 
 
 def get_effective_subscription(user):

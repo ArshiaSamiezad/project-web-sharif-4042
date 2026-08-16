@@ -2,6 +2,7 @@
 
 .controls {
   display: flex;
+  direction: ltr;
   align-items: center;
   justify-content: center;
   gap: 1.15rem;

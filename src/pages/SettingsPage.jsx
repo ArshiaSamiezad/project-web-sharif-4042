@@ -47,8 +47,8 @@ export default function SettingsPage() {
     setNotifications(next.notifications)
     setLanguageState(next.language)
     setLocalVolume(next.volume)
-    setVolume(next.volume)
-  }, [currentUser])
+    setVolume(next.volume / 100)
+  }, [currentUser, setVolume])
 
   function flashOk(text) {
     setError('')
@@ -79,11 +79,11 @@ export default function SettingsPage() {
   function handleVolumeChange(value) {
     const next = Number(value)
     setLocalVolume(next)
-    setVolume(next)
+    setVolume(next / 100)
   }
 
-  async function commitVolume() {
-    const result = await updateSettings({ volume: localVolume })
+  async function commitVolume(value = localVolume) {
+    const result = await updateSettings({ volume: Number(value) })
     if (!result.ok) {
       setError(result.error || t('settings.volumeSaveFailed'))
       return
@@ -157,11 +157,11 @@ export default function SettingsPage() {
             step="1"
             value={localVolume}
             onChange={(e) => handleVolumeChange(e.target.value)}
-            onMouseUp={commitVolume}
-            onTouchEnd={commitVolume}
+            onMouseUp={(e) => commitVolume(e.currentTarget.value)}
+            onTouchEnd={(e) => commitVolume(e.currentTarget.value)}
             onKeyUp={(e) => {
               if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
-                commitVolume()
+                commitVolume(e.currentTarget.value)
               }
             }}
           />
