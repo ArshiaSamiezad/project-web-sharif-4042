@@ -123,7 +123,7 @@ export default function ProfilePage() {
     setUsernameError('')
   }
 
-  function saveEdit(e) {
+  async function saveEdit(e) {
     e.preventDefault()
     setError('')
     setUsernameError('')
@@ -135,7 +135,7 @@ export default function ProfilePage() {
       }
       if (
         !applyUpdate(
-          updateUser(liveProfile.id, {
+          await updateUser(liveProfile.id, {
             displayName: draft.displayName.trim(),
             birthDate: draft.birthDate || null,
             gender: draft.gender || null,
@@ -161,7 +161,7 @@ export default function ProfilePage() {
         setUsernameError(t('errors.usernameTaken'))
         return
       }
-      if (!applyUpdate(updateUser(liveProfile.id, { username }), { forUsername: true })) {
+      if (!applyUpdate(await updateUser(liveProfile.id, { username }), { forUsername: true })) {
         return
       }
       setMessage(t('profile.saved'))
@@ -170,7 +170,7 @@ export default function ProfilePage() {
       }
     }
     if (editing === 'subscription') {
-      if (!applyUpdate(updateUser(liveProfile.id, { subscription: draft.subscription }))) {
+      if (!applyUpdate(await updateUser(liveProfile.id, { subscription: draft.subscription }))) {
         return
       }
       setMessage(t('profile.saved'))
@@ -182,7 +182,7 @@ export default function ProfilePage() {
         setError(t('profile.dailyStreamsInvalid'))
         return
       }
-      if (!applyUpdate(updateUser(liveProfile.id, { dailyStreams: Math.floor(value) }))) {
+      if (!applyUpdate(await updateUser(liveProfile.id, { dailyStreams: Math.floor(value) }))) {
         return
       }
       setMessage(t('profile.saved'))
@@ -195,7 +195,7 @@ export default function ProfilePage() {
       }
       if (
         !applyUpdate(
-          updateUser(liveProfile.id, {
+          await updateUser(liveProfile.id, {
             avatar: draft.avatar.trim() || null,
           }),
         )
@@ -208,7 +208,7 @@ export default function ProfilePage() {
     if (editing === 'bio') {
       if (
         !applyUpdate(
-          updateUser(liveProfile.id, {
+          await updateUser(liveProfile.id, {
             bio: draft.bio.trim(),
           }),
         )
@@ -625,8 +625,8 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     className="profile__btn profile__btn--ghost"
-                    onClick={() => {
-                      if (applyUpdate(updateUser(liveProfile.id, { avatar: null }))) {
+                    onClick={async () => {
+                      if (applyUpdate(await updateUser(liveProfile.id, { avatar: '' }))) {
                         setMessage(t('profile.saved'))
                         cancelEdit()
                       }

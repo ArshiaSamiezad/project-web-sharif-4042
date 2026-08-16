@@ -118,7 +118,6 @@ function NavIcon({ name }) {
       return null
   }
 }
-
 export default function AppShell() {
   const {
     currentUser,
@@ -275,5 +274,3 @@ export default function AppShell() {
     </div>
   )
 }
-
-

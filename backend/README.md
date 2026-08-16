@@ -13,7 +13,7 @@ python manage.py seed_demo
 python manage.py runserver
 ```
 
-API base: `http://127.0.0.1:8000/api/`  
+API base: `http://127.0.0.1:8000/api/`
 Media files: `http://127.0.0.1:8000/media/` (stored under `backend/media/`)
 
 Gemini recommendations need `GEMINI_API_KEY` in `backend/.env` (see `.env.example`).
@@ -28,7 +28,7 @@ Gemini recommendations need `GEMINI_API_KEY` in `backend/.env` (see `.env.exampl
 | Playlist covers | `media/covers/playlists/<owner_id>/` |
 | Audio files | `media/audio/<artist_id>/` |
 
-Accepted images: JPEG / PNG  
+Accepted images: JPEG / PNG
 Accepted audio: MP3 / WAV / FLAC
 
 Upload with `multipart/form-data`. Response fields `cover`, `avatar`, and `audioUrl` are absolute URLs.

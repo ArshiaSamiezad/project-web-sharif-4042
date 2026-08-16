@@ -57,11 +57,11 @@ export default function SignupPage() {
     patchArtist({ samples })
   }
 
-  function handleListenerSubmit(e) {
+  async function handleListenerSubmit(e) {
     e.preventDefault()
     setError('')
     setSubmitting(true)
-    const result = registerListener(listener)
+    const result = await registerListener(listener)
     setSubmitting(false)
     if (!result.ok) {
       setError(result.error)
@@ -73,11 +73,11 @@ export default function SignupPage() {
     })
   }
 
-  function handleArtistSubmit(e) {
+  async function handleArtistSubmit(e) {
     e.preventDefault()
     setError('')
     setSubmitting(true)
-    const result = registerArtist(artist)
+    const result = await registerArtist(artist)
     setSubmitting(false)
     if (!result.ok) {
       setError(result.error)

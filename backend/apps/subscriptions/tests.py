@@ -1,6 +1,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
@@ -174,6 +175,19 @@ class UserSubscriptionSyncTests(PlanMixin, TestCase):
         services.sync_user_subscription_tier(user)
         user.refresh_from_db()
         self.assertEqual(user.subscription, User.Subscription.BASIC)
+
+    def test_sync_updates_matching_authenticated_account(self):
+        user = make_user('sync_auth_account')
+        auth_user = get_user_model().objects.create_user(
+            email=user.email,
+            password='StrongPass!42',
+            display_name='Sync Auth',
+        )
+
+        services.activate_subscription(user, self.gold, 1)
+
+        auth_user.refresh_from_db()
+        self.assertEqual(auth_user.subscription, User.Subscription.GOLD)
 
 
 class SubscriptionPlanListAPITests(PlanMixin, APITestCase):

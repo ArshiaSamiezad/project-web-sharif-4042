@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -16,6 +17,9 @@ from apps.playlists.models import Playlist, PlaylistTrack
 from apps.subscriptions import services as subscription_services
 from apps.subscriptions.models import SubscriptionPlan, Transaction, UserSubscription
 from apps.users.models import User
+
+
+AuthUser = get_user_model()
 
 
 SAMPLE_AUDIO = [
@@ -884,18 +888,32 @@ class Command(BaseCommand):
                 status=User.Status.APPROVED,
                 subscription=User.Subscription.BASIC,
             )
-            User.objects.create(
+            support = User.objects.create(
                 email='support@sepatify.test',
                 display_name='پشتیبان',
                 username='user_support',
                 role=User.Role.SUPPORT,
             )
-            User.objects.create(
+            admin = User.objects.create(
                 email='admin@sepatify.test',
                 display_name='مدیر سامانه',
                 username='user_admin',
                 role=User.Role.ADMIN,
             )
+
+            for catalog_user in (listener, gold, artist, support, admin):
+                auth_user, _ = AuthUser.objects.update_or_create(
+                    email=catalog_user.email,
+                    defaults={
+                        'username': catalog_user.username,
+                        'display_name': catalog_user.display_name,
+                        'role': catalog_user.role,
+                        'subscription': catalog_user.subscription,
+                        'artist_name': catalog_user.artist_name,
+                    },
+                )
+                auth_user.set_password('password')
+                auth_user.save(update_fields=['password'])
 
             album_ocean = Album.objects.create(
                 title='اقیانوس بی‌صدا',

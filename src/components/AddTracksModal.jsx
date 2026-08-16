@@ -12,13 +12,15 @@ function matchesQuery(text, query) {
 }
 
 export default function AddTracksModal({ open, playlistId, onClose }) {
-  const { currentUser, getCatalog, toggleTrackInPlaylist } = useAuth()
+  const { currentUser, getCatalog, toggleTrackInPlaylist, toggleAlbumInPlaylist } = useAuth()
   const { t } = useI18n()
   const catalog = getCatalog()
   const titleId = useId()
   const inputRef = useRef(null)
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
+  const [expandedIds, setExpandedIds] = useState(() => new Set())
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set())
 
   const playlist = catalog.playlists.find((p) => idEq(p.id, playlistId))
   const trackIds = playlist?.trackIds || []
@@ -26,20 +28,66 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
   const normalizedQuery = query.trim().toLowerCase()
 
   const results = useMemo(() => {
-    return catalog.tracks
-      .filter((track) => isGold || !track.earlyAccess)
+    const visibleTracks = catalog.tracks.filter((track) => isGold || !track.earlyAccess)
+    const visibleAlbums = catalog.albums.filter((album) => isGold || !album.earlyAccess)
+
+    const singles = visibleTracks
+      .filter((track) => !track.albumId)
       .filter((track) => {
         if (!normalizedQuery) return true
-        const album = track.albumId
-          ? catalog.albums.find((a) => idEq(a.id, track.albumId))
-          : null
         return (
           matchesQuery(track.title, normalizedQuery) ||
-          matchesQuery(track.artistName, normalizedQuery) ||
-          matchesQuery(album?.title, normalizedQuery)
+          matchesQuery(track.artistName, normalizedQuery)
         )
       })
-      .sort((a, b) => (b.plays || 0) - (a.plays || 0))
+      .map((track) => ({ type: 'single', track }))
+      .sort((a, b) => (b.track.plays || 0) - (a.track.plays || 0))
+
+    const albums = visibleAlbums
+      .map((album) => {
+        const albumTracks = visibleTracks
+          .filter((track) => idEq(track.albumId, album.id))
+          .sort((a, b) => (b.plays || 0) - (a.plays || 0))
+
+        if (!normalizedQuery) {
+          return {
+            type: 'album',
+            album,
+            tracks: albumTracks,
+            allTracks: albumTracks,
+            autoExpand: false,
+            listeners: album.listeners || 0,
+          }
+        }
+
+        const titleMatch = matchesQuery(album.title, normalizedQuery)
+        const artistMatch =
+          matchesQuery(album.artistName, normalizedQuery) ||
+          albumTracks.some((track) => matchesQuery(track.artistName, normalizedQuery))
+        const titleMatchedTracks = albumTracks.filter((track) =>
+          matchesQuery(track.title, normalizedQuery),
+        )
+
+        if (!titleMatch && !artistMatch && titleMatchedTracks.length === 0) {
+          return null
+        }
+
+        // Album name hit → all tracks. Track name hit → only matching tracks.
+        const childTracks = titleMatch ? albumTracks : titleMatchedTracks.length > 0 ? titleMatchedTracks : albumTracks
+
+        return {
+          type: 'album',
+          album,
+          tracks: childTracks,
+          allTracks: albumTracks,
+          autoExpand: titleMatch || titleMatchedTracks.length > 0,
+          listeners: album.listeners || 0,
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.listeners || 0) - (a.listeners || 0))
+
+    return [...albums, ...singles]
   }, [catalog.tracks, catalog.albums, isGold, normalizedQuery])
 
   useEffect(() => {
@@ -47,6 +95,8 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
 
     setQuery('')
     setMessage('')
+    setExpandedIds(new Set())
+    setCollapsedIds(new Set())
     const timer = window.setTimeout(() => inputRef.current?.focus(), 40)
 
     function onKeyDown(event) {
@@ -64,16 +114,54 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
     }
   }, [open, onClose])
 
+  useEffect(() => {
+    setExpandedIds(new Set())
+    setCollapsedIds(new Set())
+  }, [normalizedQuery])
+
   if (!open || !playlist || !idEq(playlist.ownerId, currentUser?.id)) return null
 
-  function handleToggle(trackId) {
-    toggleTrackInPlaylist(playlistId, trackId).then((result) => {
-      if (!result.ok) {
-        setMessage(result.error)
-        return
-      }
-      setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
+  async function handleToggleTrack(trackId) {
+    const result = await toggleTrackInPlaylist(playlistId, trackId)
+    if (!result.ok) {
+      setMessage(result.error)
+      return
+    }
+    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
+  }
+
+  async function handleToggleAlbum(albumId) {
+    const result = await toggleAlbumInPlaylist(playlistId, albumId)
+    if (!result.ok) {
+      setMessage(result.error)
+      return
+    }
+    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
+  }
+
+  function isAlbumExpanded(albumId, autoExpand) {
+    if (collapsedIds.has(albumId)) return false
+    if (autoExpand) return true
+    return expandedIds.has(albumId)
+  }
+
+  function toggleExpanded(albumId, currentlyExpanded) {
+    if (currentlyExpanded) {
+      setCollapsedIds((prev) => new Set(prev).add(albumId))
+      setExpandedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(albumId)
+        return next
+      })
+      return
+    }
+
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(albumId)
+      return next
     })
+    setExpandedIds((prev) => new Set(prev).add(albumId))
   }
 
   return createPortal(
@@ -124,30 +212,99 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
           {results.length === 0 ? (
             <p className="add-tracks-modal__empty">{t('playlists.nothingFound')}</p>
           ) : (
-            results.map((track) => {
-              const inPlaylist = trackIds.some((id) => idEq(id, track.id))
-              const album = track.albumId
-                ? catalog.albums.find((a) => idEq(a.id, track.albumId))
-                : null
+            results.map((item) => {
+              if (item.type === 'single') {
+                const { track } = item
+                const inPlaylist = trackIds.some((id) => idEq(id, track.id))
+
+                return (
+                  <article key={track.id} className="add-tracks-modal__row">
+                    <img src={track.cover} alt="" />
+                    <div className="add-tracks-modal__row-text">
+                      <strong>{track.title}</strong>
+                      <span>{track.artistName} • تک‌آهنگ</span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`add-tracks-modal__action${inPlaylist ? ' is-added' : ''}`}
+                      onClick={() => handleToggleTrack(track.id)}
+                    >
+                      {inPlaylist ? 'حذف' : 'افزودن'}
+                    </button>
+                  </article>
+                )
+              }
+
+              const { album, tracks, allTracks, autoExpand } = item
+              const isExpanded = isAlbumExpanded(album.id, autoExpand)
+              const allIn =
+                allTracks.length > 0 &&
+                allTracks.every((track) => trackIds.some((id) => idEq(id, track.id)))
+              const someIn = allTracks.some((track) =>
+                trackIds.some((id) => idEq(id, track.id)),
+              )
 
               return (
-                <article key={track.id} className="add-tracks-modal__row">
-                  <img src={track.cover} alt="" />
-                  <div className="add-tracks-modal__row-text">
-                    <strong>{track.title}</strong>
-                    <span>
-                      {track.artistName}
-                      {album ? ` • ${album.title}` : t('playlists.singleSuffix')}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`add-tracks-modal__action${inPlaylist ? ' is-added' : ''}`}
-                    onClick={() => handleToggle(track.id)}
-                  >
-                    {inPlaylist ? t('common.delete') : t('playlists.add')}
-                  </button>
-                </article>
+                <div key={album.id} className="add-tracks-modal__album-block">
+                  <article className="add-tracks-modal__row add-tracks-modal__row--album">
+                    <button
+                      type="button"
+                      className={`add-tracks-modal__expand${isExpanded ? ' is-open' : ''}`}
+                      onClick={() => toggleExpanded(album.id, isExpanded)}
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? 'بستن آهنگ‌های آلبوم' : 'باز کردن آهنگ‌های آلبوم'}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    <img src={album.cover} alt="" />
+                    <div className="add-tracks-modal__row-text">
+                      <strong>{album.title}</strong>
+                      <span>
+                        {album.artistName} • آلبوم • {allTracks.length} آهنگ
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={`add-tracks-modal__action${allIn ? ' is-added' : ''}${someIn && !allIn ? ' is-partial' : ''}`}
+                      onClick={() => handleToggleAlbum(album.id)}
+                    >
+                      {allIn ? 'حذف' : 'افزودن'}
+                    </button>
+                  </article>
+
+                  {isExpanded ? (
+                    <div className="add-tracks-modal__children">
+                      {tracks.length === 0 ? (
+                        <p className="add-tracks-modal__child-empty">آهنگی در این آلبوم نیست.</p>
+                      ) : (
+                        tracks.map((track) => {
+                          const inPlaylist = trackIds.some((id) => idEq(id, track.id))
+                          return (
+                            <article
+                              key={track.id}
+                              className="add-tracks-modal__row add-tracks-modal__row--child"
+                            >
+                              <img src={track.cover} alt="" />
+                              <div className="add-tracks-modal__row-text">
+                                <strong>{track.title}</strong>
+                                <span>{track.artistName}</span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`add-tracks-modal__action${inPlaylist ? ' is-added' : ''}`}
+                                onClick={() => handleToggleTrack(track.id)}
+                              >
+                                {inPlaylist ? 'حذف' : 'افزودن'}
+                              </button>
+                            </article>
+                          )
+                        })
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               )
             })
           )}

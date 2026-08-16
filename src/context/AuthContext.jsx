@@ -16,6 +16,7 @@ import {
   validateLogin,
   validatePasswordReset,
 } from '../lib/validation'
+import * as backend from '../lib/api'
 import { formatNumber, t } from '../i18n/translations'
 
 const AuthContext = createContext(null)
@@ -33,10 +34,6 @@ export function getUserSettings(user) {
   }
 }
 
-function generateUsername() {
-  return `user_${Math.random().toString(36).slice(2, 8)}`
-}
-
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [ready, setReady] = useState(false)
@@ -50,11 +47,13 @@ export function AuthProvider({ children }) {
     setCatalogVersion((n) => n + 1)
   }
 
-  function getUserMaps() {
-    return buildUserIdMaps(storage.getItem('users', []), apiUsers)
+  function getUserMaps(authUser = currentUser) {
+    const localUsers = storage.getItem('users', [])
+    const usersForMapping = authUser ? [...localUsers, authUser] : localUsers
+    return buildUserIdMaps(usersForMapping, apiUsers)
   }
 
-  async function refreshCatalog() {
+  async function refreshCatalog(authUser = currentUser) {
     const [apiUserList, albumList, trackList, playlistList] = await Promise.all([
       catalogApi.listUsers(),
       catalogApi.listAlbums(),
@@ -62,7 +61,9 @@ export function AuthProvider({ children }) {
       catalogApi.listPlaylists(),
     ])
     const users = Array.isArray(apiUserList) ? apiUserList : []
-    const maps = buildUserIdMaps(storage.getItem('users', []), users)
+    const localUsers = storage.getItem('users', [])
+    const usersForMapping = authUser ? [...localUsers, authUser] : localUsers
+    const maps = buildUserIdMaps(usersForMapping, users)
     setApiUsers(users)
     setAlbums((albumList || []).map((item) => mapAlbumFromApi(item, maps)))
     setTracks((trackList || []).map((item) => mapTrackFromApi(item, maps)))
@@ -119,14 +120,23 @@ export function AuthProvider({ children }) {
 
     async function boot() {
       ensureSeedData(storage)
-      const sessionId = storage.getItem('sessionUserId')
-      if (sessionId) {
-        const users = storage.getItem('users', [])
-        const found = users.find((u) => u.id === sessionId) || null
-        setCurrentUser(found)
+      let sessionUser = null
+
+      if (backend.hasSession()) {
+        try {
+          const [user, preferences] = await Promise.all([
+            backend.api('/auth/me/'),
+            backend.api('/auth/preferences/'),
+          ])
+          sessionUser = setSession(user, preferences)
+        } catch {
+          backend.clearSession()
+          setSession(null)
+        }
       }
+
       try {
-        await refreshCatalog()
+        await refreshCatalog(sessionUser)
       } catch {
         if (!cancelled) {
           setAlbums([])
@@ -151,149 +161,123 @@ export function AuthProvider({ children }) {
     storage.setItem('users', users)
   }
 
-  function setSession(user) {
-    setCurrentUser(user)
-    if (user) storage.setItem('sessionUserId', user.id)
-    else storage.removeItem('sessionUserId')
+  function mergeSessionUser(user, preferences) {
+    if (!user) return null
+    const localUser = getUsers().find(
+      (item) => item.email?.toLowerCase() === user.email?.toLowerCase(),
+    )
+    return {
+      followers: [],
+      following: [],
+      dailyStreams: 0,
+      recentPlaylistIds: [],
+      ...localUser,
+      ...user,
+      id: localUser?.id ?? user.id,
+      backendId: user.backendId ?? user.id,
+      artistName: user.artistName ?? user.artist_name ?? localUser?.artistName ?? '',
+      settings: {
+        ...DEFAULT_USER_SETTINGS,
+        ...(localUser?.settings || {}),
+        ...(preferences || {}),
+      },
+    }
   }
 
-  function login(email, password) {
+  function setSession(user, preferences) {
+    const merged = mergeSessionUser(user, preferences)
+    setCurrentUser(merged)
+    return merged
+  }
+
+  async function login(email, password) {
     const validationError = validateLogin({ email, password })
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    const users = getUsers()
-    const user = users.find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password,
-    )
-    if (!user) {
-      return { ok: false, error: t('errors.invalidCredentials') }
+    try {
+      const user = await backend.login(email.trim(), password)
+      if (user.status === 'pending') {
+        backend.clearSession()
+        return { ok: false, error: t('errors.artistPending') }
+      }
+      if (user.status === 'rejected') {
+        backend.clearSession()
+        return { ok: false, error: t('errors.artistRejected') }
+      }
+      const preferences = await backend.api('/auth/preferences/')
+      const sessionUser = setSession(user, preferences)
+      await refreshCatalog(sessionUser)
+      return { ok: true, user: sessionUser }
+    } catch (error) {
+      return { ok: false, error: error.message || t('errors.invalidCredentials') }
     }
-    if (user.role === 'artist' && user.status === 'pending') {
-      return { ok: false, error: t('errors.artistPending') }
-    }
-    if (user.role === 'artist' && user.status === 'rejected') {
-      return { ok: false, error: t('errors.artistRejected') }
-    }
-    setSession(user)
-    return { ok: true, user }
   }
 
-  function logout() {
-    setSession(null)
+  async function logout() {
+    try {
+      await backend.logout()
+    } finally {
+      setSession(null)
+    }
   }
 
-  function registerListener(data) {
+  async function registerListener(data) {
     const validationError = validateListenerSignup(data)
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    const users = getUsers()
-    const email = data.email.trim().toLowerCase()
-
-    if (users.some((u) => u.email.toLowerCase() === email)) {
-      return { ok: false, error: t('errors.emailTaken') }
+    try {
+      const user = await backend.api('/auth/register/listener/', {
+        method: 'POST',
+        body: data,
+      })
+      return { ok: true, user }
+    } catch (error) {
+      return { ok: false, error: error.message || t('errors.emailTaken') }
     }
-
-    const user = {
-      id: `u-${Date.now()}`,
-      email,
-      password: data.password,
-      displayName: data.displayName.trim(),
-      username: generateUsername(),
-      role: 'listener',
-      subscription: 'basic',
-      avatar: null,
-      birthDate: data.birthDate,
-      gender: data.gender,
-      followers: [],
-      following: [],
-      dailyStreams: 0,
-      recentPlaylistIds: [],
-      settings: { ...DEFAULT_USER_SETTINGS },
-    }
-    persistUsers([...users, user])
-    return { ok: true, user }
   }
 
-  function registerArtist(data) {
+  async function registerArtist(data) {
     const validationError = validateArtistSignup(data)
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    const users = getUsers()
-    const email = data.email.trim().toLowerCase()
-
-    if (users.some((u) => u.email.toLowerCase() === email)) {
-      return { ok: false, error: t('errors.emailTaken') }
+    try {
+      const payload = { ...data, samples: data.samples.map((sample) => sample.name || String(sample)) }
+      const user = await backend.api('/auth/register/artist/', { method: 'POST', body: payload })
+      return { ok: true, user, pending: true }
+    } catch (error) {
+      return { ok: false, error: error.message || t('errors.emailTaken') }
     }
-
-    const user = {
-      id: `u-${Date.now()}`,
-      email,
-      password: data.password,
-      displayName: data.artistName.trim(),
-      username: generateUsername(),
-      role: 'artist',
-      artistName: data.artistName.trim(),
-      samples: data.samples,
-      status: 'pending',
-      bio: '',
-      subscription: 'basic',
-      avatar: null,
-      birthDate: null,
-      gender: null,
-      followers: [],
-      following: [],
-      dailyStreams: 0,
-      recentPlaylistIds: [],
-      settings: { ...DEFAULT_USER_SETTINGS },
-    }
-    persistUsers([...users, user])
-
-    const staff = users.filter((u) => u.role === 'support' || u.role === 'admin')
-    if (staff.length > 0) {
-      const now = new Date().toISOString()
-      const notifications = storage.getItem('notifications', [])
-      const staffNotes = staff.map((member, index) => ({
-        id: `n-verify-${user.id}-${index}`,
-        userId: member.id,
-        type: 'artist_verification',
-        important: true,
-        params: { artistName: user.artistName },
-        link: `/staff/artists/${user.id}`,
-        createdAt: now,
-        read: false,
-      }))
-      storage.setItem('notifications', [...staffNotes, ...notifications])
-      bumpCatalog()
-    }
-
-    return { ok: true, user, pending: true }
   }
 
-  function requestPasswordReset(email) {
+  async function requestPasswordReset(email) {
     const validationError = validatePasswordReset({ email })
     if (validationError) {
       return { ok: false, error: validationError }
     }
 
-    return {
-      ok: true,
-      message: t('errors.resetSent'),
+    try {
+      await backend.api('/auth/password-reset/', { method: 'POST', body: { email } })
+      return { ok: true, message: t('errors.resetSent') }
+    } catch (error) {
+      return { ok: false, error: error.message }
     }
   }
 
   function getUserById(userId) {
-    return getUsers().find((u) => u.id === userId) || null
+    if (idEq(currentUser?.id, userId)) return currentUser
+    return getUsers().find((u) => idEq(u.id, userId)) || null
   }
 
   function getUserByUsername(username) {
     const key = String(username ?? '').trim().toLowerCase()
     if (!key) return null
+    if (currentUser?.username?.toLowerCase() === key) return currentUser
     return getUsers().find((u) => u.username?.toLowerCase() === key) || null
   }
 
@@ -306,6 +290,39 @@ export function AuthProvider({ children }) {
   }
 
   async function updateUser(userId, patch) {
+    if (typeof File !== 'undefined' && patch.avatar instanceof File) {
+      try {
+        const apiId = await ensureApiUserId(getUserById(userId) || currentUser)
+        const remote = await catalogApi.updateUser(apiId, { avatar: patch.avatar })
+        patch = { ...patch, avatar: remote.avatar || '' }
+      } catch (error) {
+        return apiFailure(error, t('errors.settingsLoginRequired'))
+      }
+    }
+
+    if (idEq(userId, currentUser?.id)) {
+      const { settings, ...serverPatch } = patch
+      try {
+        const serverUser = Object.keys(serverPatch).length
+          ? await backend.api('/auth/me/', { method: 'PATCH', body: serverPatch })
+          : currentUser
+        const updated = mergeSessionUser(
+          serverUser,
+          settings ? { ...getUserSettings(currentUser), ...settings } : currentUser.settings,
+        )
+        const nextUsers = getUsers().map((user) =>
+          idEq(user.id, currentUser.id) ||
+          user.email?.toLowerCase() === currentUser.email?.toLowerCase()
+            ? { ...user, ...serverPatch, ...(settings ? { settings: updated.settings } : {}) }
+            : user,
+        )
+        persistUsers(nextUsers)
+        setCurrentUser(updated)
+        return { ok: true, user: updated }
+      } catch (error) {
+        return { ok: false, error: error.message }
+      }
+    }
     const users = getUsers()
 
     if (patch.username !== undefined) {
@@ -328,17 +345,6 @@ export function AuthProvider({ children }) {
       }
     }
 
-    if (patch.avatar instanceof File) {
-      try {
-        const maps = getUserMaps()
-        const apiId = toApiUserId(userId, maps)
-        const remote = await catalogApi.updateUser(apiId, { avatar: patch.avatar })
-        patch = { ...patch, avatar: remote.avatar || null }
-      } catch (error) {
-        return apiFailure(error, t('errors.settingsLoginRequired'))
-      }
-    }
-
     const next = users.map((u) => (u.id === userId ? { ...u, ...patch } : u))
     persistUsers(next)
     const updated = next.find((u) => u.id === userId) || null
@@ -348,16 +354,45 @@ export function AuthProvider({ children }) {
     return { ok: true, user: updated }
   }
 
-  function updateSettings(partial) {
+  async function updateSettings(partial) {
     if (!currentUser) {
       return { ok: false, error: t('errors.settingsLoginRequired') }
     }
-    return updateUser(currentUser.id, {
-      settings: {
-        ...getUserSettings(currentUser),
-        ...partial,
-      },
-    })
+
+    const nextSettings = { ...getUserSettings(currentUser), ...partial }
+    const preferenceKeys = [
+      'theme',
+      'language',
+      'autoplay',
+      'explicitContent',
+      'emailNotifications',
+    ]
+    const preferencePatch = Object.fromEntries(
+      preferenceKeys
+        .filter((key) => Object.prototype.hasOwnProperty.call(partial, key))
+        .map((key) => [key, partial[key]]),
+    )
+
+    try {
+      const savedPreferences = Object.keys(preferencePatch).length
+        ? await backend.api('/auth/preferences/', {
+            method: 'PATCH',
+            body: preferencePatch,
+          })
+        : {}
+      const settings = { ...nextSettings, ...savedPreferences }
+      const nextUsers = getUsers().map((user) =>
+        idEq(user.id, currentUser.id) ||
+        user.email?.toLowerCase() === currentUser.email?.toLowerCase()
+          ? { ...user, settings }
+          : user,
+      )
+      persistUsers(nextUsers)
+      setCurrentUser((user) => ({ ...user, settings }))
+      return { ok: true, settings }
+    } catch (error) {
+      return { ok: false, error: error.message || t('settings.saveFailed') }
+    }
   }
 
   async function deleteAccount(userId = currentUser?.id) {
@@ -366,34 +401,53 @@ export function AuthProvider({ children }) {
     }
 
     const users = getUsers()
-    if (!users.some((u) => u.id === userId)) {
+    const isCurrentUser = idEq(currentUser?.id, userId)
+    const localUser = users.find(
+      (user) =>
+        idEq(user.id, userId) ||
+        (isCurrentUser && user.email?.toLowerCase() === currentUser.email?.toLowerCase()),
+    )
+    if (!localUser && !isCurrentUser) {
       return { ok: false, error: t('errors.accountNotFound') }
     }
 
+    if (isCurrentUser) {
+      try {
+        await backend.api('/auth/me/', { method: 'DELETE' })
+      } catch (error) {
+        return { ok: false, error: error.message || t('settings.deleteFailed') }
+      }
+    }
+
+    const localUserId = localUser?.id ?? userId
+
     const nextUsers = users
-      .filter((u) => u.id !== userId)
+      .filter((u) => !idEq(u.id, localUserId))
       .map((u) => ({
         ...u,
-        followers: (u.followers || []).filter((id) => id !== userId),
-        following: (u.following || []).filter((id) => id !== userId),
+        followers: (u.followers || []).filter((id) => !idEq(id, localUserId)),
+        following: (u.following || []).filter((id) => !idEq(id, localUserId)),
       }))
     persistUsers(nextUsers)
 
     try {
-      const owned = playlists.filter((p) => idEq(p.ownerId, userId))
-      await Promise.all(owned.map((p) => catalogApi.deletePlaylist(p.id)))
+      if (!isCurrentUser) {
+        const owned = playlists.filter((p) => idEq(p.ownerId, localUserId))
+        await Promise.all(owned.map((p) => catalogApi.deletePlaylist(p.id)))
+      }
       await refreshCatalog()
     } catch {
-      /* catalog cleanup best-effort */
+      /* Refresh and legacy catalog cleanup are best-effort. */
     }
 
-    if (currentUser?.id === userId) {
+    if (isCurrentUser) {
+      backend.clearSession()
       setSession(null)
     }
 
     const notifications = storage
       .getItem('notifications', [])
-      .filter((n) => n.userId !== userId)
+      .filter((n) => !idEq(n.userId, localUserId))
     storage.setItem('notifications', notifications)
     bumpCatalog()
     return { ok: true }

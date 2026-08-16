@@ -97,6 +97,14 @@ def sync_user_subscription_tier(user):
     if user.subscription != tier:
         user.subscription = tier
         user.save(update_fields=['subscription'])
+
+    # Authentication and catalog users are separate legacy models. Keep the
+    # authenticated account in sync so JWT profile responses expose purchases.
+    from django.contrib.auth import get_user_model
+
+    get_user_model().objects.filter(email__iexact=user.email).exclude(
+        subscription=tier
+    ).update(subscription=tier)
     return tier
 
 

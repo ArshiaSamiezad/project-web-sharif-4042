@@ -55,9 +55,9 @@ export default function SettingsPage() {
     setMessage(text)
   }
 
-  function saveNotifications(value) {
+  async function saveNotifications(value) {
     setNotifications(value)
-    const result = updateSettings({ notifications: value })
+    const result = await updateSettings({ notifications: value })
     if (!result.ok) {
       setError(result.error || t('settings.saveFailed'))
       return
@@ -65,10 +65,10 @@ export default function SettingsPage() {
     flashOk(t('settings.notifSaved'))
   }
 
-  function saveLanguage(value) {
+  async function saveLanguage(value) {
     setLanguageState(value)
     setLanguage(value)
-    const result = updateSettings({ language: value })
+    const result = await updateSettings({ language: value })
     if (!result.ok) {
       setError(result.error || t('settings.saveFailed'))
       return
@@ -82,8 +82,8 @@ export default function SettingsPage() {
     setVolume(next)
   }
 
-  function commitVolume() {
-    const result = updateSettings({ volume: localVolume })
+  async function commitVolume() {
+    const result = await updateSettings({ volume: localVolume })
     if (!result.ok) {
       setError(result.error || t('settings.volumeSaveFailed'))
       return

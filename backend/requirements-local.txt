@@ -1,0 +1,5 @@
+# Dependencies for running the backend directly on Windows with SQLite.
+Django>=5.2.8,<5.3
+djangorestframework>=3.16,<3.17
+djangorestframework-simplejwt>=5.5,<5.6
+django-cors-headers>=4.7,<5

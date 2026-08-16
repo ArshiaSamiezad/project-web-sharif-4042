@@ -31,12 +31,12 @@ export default function LoginPage() {
   if (!ready) return null
   if (currentUser) return <Navigate to="/home" replace />
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault()
     setFeedback(null)
     setNotice('')
     setSubmitting(true)
-    const result = login(email, password)
+    const result = await login(email, password)
     setSubmitting(false)
     if (!result.ok) {
       setFeedback({ type: 'error', text: result.error })
@@ -45,11 +45,11 @@ export default function LoginPage() {
     navigate('/home', { replace: true })
   }
 
-  function handleReset(e) {
+  async function handleReset(e) {
     e.preventDefault()
     setFeedback(null)
     setResetMessage('')
-    const result = requestPasswordReset(resetEmail)
+    const result = await requestPasswordReset(resetEmail)
     if (!result.ok) {
       setFeedback({ type: 'error', text: result.error })
       return
