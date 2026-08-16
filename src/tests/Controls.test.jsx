@@ -3,6 +3,25 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import Controls from '../components/player/Controls';
 
+// ماک کردن هوک ترجمه به صورت کاملاً ایزوله
+vi.mock('../i18n/I18nProvider', () => {
+  const mockTranslations = {
+    'player.shuffle': 'پخش تصادفی',
+    'player.previous': 'آهنگ قبلی',
+    'player.play': 'پخش',
+    'player.pause': 'توقف پخش',
+    'player.next': 'آهنگ بعدی',
+    'player.repeat': 'حالت تکرار',
+  };
+
+  return {
+    useI18n: () => ({
+      t: (key) => mockTranslations[key] || key,
+      locale: 'fa',
+    }),
+  };
+});
+
 describe('Controls Component (Original Code)', () => {
   it('renders all 5 control buttons', () => {
     render(<Controls isPlaying={false} shuffle={false} repeat={0} />);
