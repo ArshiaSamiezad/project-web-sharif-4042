@@ -25,3 +25,6 @@ dist-ssr
 
 structure.txt
 system_prompt.txt
+
+.env
+**/.env

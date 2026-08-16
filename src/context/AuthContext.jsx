@@ -1408,6 +1408,7 @@ export function AuthProvider({ children }) {
     getSubscriptionStats,
     getUserById,
     getUserByUsername,
+    getUserMaps,
     isUsernameTaken,
     updateUser,
     updateSettings,

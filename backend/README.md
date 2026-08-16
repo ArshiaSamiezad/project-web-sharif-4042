@@ -7,6 +7,7 @@ Django REST API for albums, tracks, playlists, and media uploads.
 ```bash
 cd backend
 python -m pip install -r requirements.txt
+copy .env.example .env   # set GEMINI_API_KEY
 python manage.py migrate
 python manage.py seed_demo
 python manage.py runserver
@@ -14,6 +15,8 @@ python manage.py runserver
 
 API base: `http://127.0.0.1:8000/api/`  
 Media files: `http://127.0.0.1:8000/media/` (stored under `backend/media/`)
+
+Gemini recommendations need `GEMINI_API_KEY` in `backend/.env` (see `.env.example`).
 
 ## Media layout
 
@@ -50,6 +53,7 @@ Upload with `multipart/form-data`. Response fields `cover`, `avatar`, and `audio
 ### Playlists
 - CRUD + add/remove tracks
 - Optional file field: `cover`
+- `POST /api/playlists/{id}/recommend/` — Gemini picks 10 catalog track IDs (UI shows 5, keeps 5 in reserve)
 
 ## Frontend
 

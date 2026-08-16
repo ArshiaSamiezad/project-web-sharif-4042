@@ -175,4 +175,6 @@ export const catalogApi = {
     }),
   removeTrackFromPlaylist: (playlistId, trackId) =>
     request(`/playlists/${playlistId}/tracks/${trackId}/`, { method: 'DELETE' }),
+  recommendPlaylistTracks: (playlistId) =>
+    request(`/playlists/${playlistId}/recommend/`, { method: 'POST' }),
 }

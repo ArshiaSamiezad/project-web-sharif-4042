@@ -4,6 +4,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from .models import Playlist, PlaylistTrack
+from .recommendations import recommend_tracks_for_playlist
 from .serializers import PlaylistSerializer, PlaylistTrackWriteSerializer
 
 
@@ -19,6 +20,15 @@ class PlaylistViewSet(viewsets.ModelViewSet):
         if owner_id:
             queryset = queryset.filter(owner_id=owner_id)
         return queryset
+
+    @action(detail=True, methods=['post'], url_path='recommend')
+    def recommend(self, request, pk=None):
+        playlist = self.get_object()
+        try:
+            payload = recommend_tracks_for_playlist(playlist, request=request, limit=10)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(payload)
 
     @action(detail=True, methods=['post'], url_path='tracks')
     def add_track(self, request, pk=None):
