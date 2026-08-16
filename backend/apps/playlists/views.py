@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from apps.subscriptions import access
 
 from .models import Playlist, PlaylistTrack
+from .recommendations import recommend_tracks_for_playlist
 from .serializers import PlaylistSerializer, PlaylistTrackWriteSerializer
 
 
@@ -32,6 +33,15 @@ class PlaylistViewSet(viewsets.ModelViewSet):
             locked_ids = Playlist.objects.select_for_update().filter(owner=owner).values_list('id', flat=True)
             access.ensure_playlist_creation_allowed(owner, len(list(locked_ids)))
             serializer.save()
+
+    @action(detail=True, methods=['post'], url_path='recommend')
+    def recommend(self, request, pk=None):
+        playlist = self.get_object()
+        try:
+            payload = recommend_tracks_for_playlist(playlist, request=request, limit=10)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(payload)
 
     @action(detail=True, methods=['post'], url_path='tracks')
     def add_track(self, request, pk=None):

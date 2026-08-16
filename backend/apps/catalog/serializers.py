@@ -39,10 +39,13 @@ def media_url(file_field, request=None):
         return ''
 
 
-def cover_url(file_field, kind, object_id, request=None):
+def cover_url(file_field, kind, object_id, request=None, fallback_field=None):
     url = media_url(file_field, request)
     if url:
         return url
+    fallback = media_url(fallback_field, request) if fallback_field is not None else ''
+    if fallback:
+        return fallback
     return f'https://picsum.photos/seed/sepatify-{kind}-{object_id}/400/400'
 
 
@@ -168,11 +171,25 @@ class TrackSerializer(serializers.ModelSerializer):
         return obj.artist.public_artist_name
 
     def get_coverImage(self, obj):
-        return cover_url(obj.cover, 'track', obj.pk, self.context.get('request'))
+        album_cover = obj.album.cover if obj.album_id else None
+        return cover_url(
+            obj.cover,
+            'track',
+            obj.pk,
+            self.context.get('request'),
+            fallback_field=album_cover,
+        )
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        url = cover_url(instance.cover, 'track', instance.pk, self.context.get('request'))
+        album_cover = instance.album.cover if instance.album_id else None
+        url = cover_url(
+            instance.cover,
+            'track',
+            instance.pk,
+            self.context.get('request'),
+            fallback_field=album_cover,
+        )
         data['cover'] = url
         data['coverImage'] = url
         return data

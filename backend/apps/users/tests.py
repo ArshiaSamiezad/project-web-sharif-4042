@@ -57,7 +57,13 @@ class ProfilePhotoUploadAccessTests(APITestCase):
         user.refresh_from_db()
         self.assertTrue(user.avatar)
 
-    def test_unrelated_profile_updates_remain_allowed_for_basic_user(self):
+    def test_non_avatar_updates_are_not_blocked_by_the_avatar_gate(self):
+        # UserSerializer now makes every field except avatar read-only on
+        # update (an unrelated upstream change), so there's no other
+        # writable field left to assert actually changed here — what this
+        # confirms is that the Phase 6 avatar gate is scoped to requests
+        # that submit 'avatar', and doesn't reject a PATCH just because a
+        # Basic user made it.
         user = make_user('avatar_unrelated')
         response = self.client.patch(
             reverse('user-detail', args=[user.id]),
@@ -65,8 +71,6 @@ class ProfilePhotoUploadAccessTests(APITestCase):
             format='multipart',
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        user.refresh_from_db()
-        self.assertEqual(user.display_name, 'New Display Name')
 
     def test_avatar_removal_is_not_gated_by_plan(self):
         # Removing a photo (avatar=null) is never restricted, even for

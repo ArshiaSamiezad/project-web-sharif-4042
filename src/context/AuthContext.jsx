@@ -74,7 +74,44 @@ export function AuthProvider({ children }) {
     if (error instanceof ApiError) {
       return { ok: false, error: error.message || fallback }
     }
+    if (error && error.message) {
+      return { ok: false, error: error.message }
+    }
     return { ok: false, error: fallback }
+  }
+
+  async function ensureApiUserId(localUser) {
+    if (!localUser) {
+      throw new Error(t('errors.worksLoginRequired'))
+    }
+
+    let maps = getUserMaps()
+    if (maps.localToApi.has(String(localUser.id))) {
+      return maps.localToApi.get(String(localUser.id))
+    }
+
+    await refreshCatalog()
+    maps = getUserMaps()
+    if (maps.localToApi.has(String(localUser.id))) {
+      return maps.localToApi.get(String(localUser.id))
+    }
+
+    await catalogApi.createUser({
+      email: localUser.email,
+      displayName: localUser.displayName || localUser.username,
+      username: localUser.username,
+      role: localUser.role || 'listener',
+      artistName: localUser.artistName || '',
+      status: localUser.status || '',
+      subscription: localUser.subscription || 'basic',
+    })
+    await refreshCatalog()
+    maps = getUserMaps()
+    const apiId = maps.localToApi.get(String(localUser.id))
+    if (apiId == null) {
+      throw new Error('اتصال کاربر به بک‌اند برقرار نشد. seed_demo را اجرا کنید.')
+    }
+    return apiId
   }
 
   useEffect(() => {
@@ -699,8 +736,7 @@ export function AuthProvider({ children }) {
     const coverFile = pickCoverFile(payload?.coverFile) || pickCoverFile(payload?.cover)
 
     try {
-      const maps = getUserMaps()
-      const artistId = toApiUserId(currentUser.id, maps)
+      const artistId = await ensureApiUserId(currentUser)
 
       if (releaseType === 'single') {
         const audio = normalizeAudio(payload?.audio)
@@ -721,7 +757,11 @@ export function AuthProvider({ children }) {
         if (coverFile) body.cover = coverFile
 
         const track = await catalogApi.createTrack(body)
-        await refreshCatalog()
+        try {
+          await refreshCatalog()
+        } catch {
+          /* keep created entity even if refresh fails */
+        }
         return { ok: true, kind: 'single', track: mapTrackFromApi(track, getUserMaps()) }
       }
 
@@ -761,7 +801,11 @@ export function AuthProvider({ children }) {
         createdTracks.push(mapTrackFromApi(track, getUserMaps()))
       }
 
-      await refreshCatalog()
+      try {
+        await refreshCatalog()
+      } catch {
+        /* keep created entities even if refresh fails */
+      }
       return {
         ok: true,
         kind: 'album',
@@ -769,7 +813,7 @@ export function AuthProvider({ children }) {
         tracks: createdTracks,
       }
     } catch (error) {
-      return apiFailure(error, t('errors.worksTitleRequired'))
+      return apiFailure(error, 'انتشار اثر انجام نشد. دوباره تلاش کنید.')
     }
   }
 
@@ -1364,6 +1408,7 @@ export function AuthProvider({ children }) {
     getSubscriptionStats,
     getUserById,
     getUserByUsername,
+    getUserMaps,
     isUsernameTaken,
     updateUser,
     updateSettings,
