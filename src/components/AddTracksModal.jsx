@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nProvider'
+import { idEq } from '../lib/ids'
 import './AddTracksModal.css'
 
 function matchesQuery(text, query) {
@@ -19,7 +20,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
 
-  const playlist = catalog.playlists.find((p) => p.id === playlistId)
+  const playlist = catalog.playlists.find((p) => idEq(p.id, playlistId))
   const trackIds = playlist?.trackIds || []
   const isGold = currentUser?.subscription === 'gold'
   const normalizedQuery = query.trim().toLowerCase()
@@ -30,7 +31,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
       .filter((track) => {
         if (!normalizedQuery) return true
         const album = track.albumId
-          ? catalog.albums.find((a) => a.id === track.albumId)
+          ? catalog.albums.find((a) => idEq(a.id, track.albumId))
           : null
         return (
           matchesQuery(track.title, normalizedQuery) ||
@@ -63,15 +64,16 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
     }
   }, [open, onClose])
 
-  if (!open || !playlist || playlist.ownerId !== currentUser?.id) return null
+  if (!open || !playlist || !idEq(playlist.ownerId, currentUser?.id)) return null
 
   function handleToggle(trackId) {
-    const result = toggleTrackInPlaylist(playlistId, trackId)
-    if (!result.ok) {
-      setMessage(result.error)
-      return
-    }
-    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
+    toggleTrackInPlaylist(playlistId, trackId).then((result) => {
+      if (!result.ok) {
+        setMessage(result.error)
+        return
+      }
+      setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
+    })
   }
 
   return createPortal(
@@ -123,9 +125,9 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
             <p className="add-tracks-modal__empty">{t('playlists.nothingFound')}</p>
           ) : (
             results.map((track) => {
-              const inPlaylist = trackIds.includes(track.id)
+              const inPlaylist = trackIds.some((id) => idEq(id, track.id))
               const album = track.albumId
-                ? catalog.albums.find((a) => a.id === track.albumId)
+                ? catalog.albums.find((a) => idEq(a.id, track.albumId))
                 : null
 
               return (

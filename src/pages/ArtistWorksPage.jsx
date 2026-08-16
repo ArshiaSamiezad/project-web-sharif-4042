@@ -182,7 +182,7 @@ export default function ArtistWorksPage() {
     patchTrackRow(key, { audio: fileMeta(file) })
   }
 
-  function handlePublish(event) {
+  async function handlePublish(event) {
     event.preventDefault()
     const isAlbum = form.releaseType === 'album'
     const payload = {
@@ -203,7 +203,7 @@ export default function ArtistWorksPage() {
       })),
     }
 
-    const result = publishWork(payload)
+    const result = await publishWork(payload)
     if (!result.ok) {
       setCreateError(result.error)
       return

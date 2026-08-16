@@ -36,15 +36,16 @@ export default function PlaylistsPage() {
 
   function handleCreate(event) {
     event.preventDefault()
-    const result = createPlaylist(createTitle)
-    if (!result.ok) {
-      setCreateError(result.error)
-      return
-    }
-    setCreating(false)
-    setCreateTitle('')
-    setCreateError('')
-    navigate(`/playlist/${result.playlist.id}`)
+    createPlaylist(createTitle).then((result) => {
+      if (!result.ok) {
+        setCreateError(result.error)
+        return
+      }
+      setCreating(false)
+      setCreateTitle('')
+      setCreateError('')
+      navigate(`/playlist/${result.playlist.id}`)
+    })
   }
 
   return (

@@ -1,5 +1,14 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as storage from '../lib/storage'
+import { catalogApi, ApiError } from '../lib/api'
+import {
+  buildUserIdMaps,
+  mapAlbumFromApi,
+  mapPlaylistFromApi,
+  mapTrackFromApi,
+  toApiUserId,
+} from '../lib/catalogMap'
+import { idEq, yearToReleasedAt } from '../lib/ids'
 import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS, DEFAULT_SUBSCRIPTION_PRICES } from '../data/seed'
 import {
   validateArtistSignup,
@@ -32,20 +41,69 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [ready, setReady] = useState(false)
   const [catalogVersion, setCatalogVersion] = useState(0)
+  const [albums, setAlbums] = useState([])
+  const [tracks, setTracks] = useState([])
+  const [playlists, setPlaylists] = useState([])
+  const [apiUsers, setApiUsers] = useState([])
 
   function bumpCatalog() {
     setCatalogVersion((n) => n + 1)
   }
 
-  useEffect(() => {
-    ensureSeedData(storage)
-    const sessionId = storage.getItem('sessionUserId')
-    if (sessionId) {
-      const users = storage.getItem('users', [])
-      const found = users.find((u) => u.id === sessionId) || null
-      setCurrentUser(found)
+  function getUserMaps() {
+    return buildUserIdMaps(storage.getItem('users', []), apiUsers)
+  }
+
+  async function refreshCatalog() {
+    const [apiUserList, albumList, trackList, playlistList] = await Promise.all([
+      catalogApi.listUsers(),
+      catalogApi.listAlbums(),
+      catalogApi.listTracks(),
+      catalogApi.listPlaylists(),
+    ])
+    const users = Array.isArray(apiUserList) ? apiUserList : []
+    const maps = buildUserIdMaps(storage.getItem('users', []), users)
+    setApiUsers(users)
+    setAlbums((albumList || []).map((item) => mapAlbumFromApi(item, maps)))
+    setTracks((trackList || []).map((item) => mapTrackFromApi(item, maps)))
+    setPlaylists((playlistList || []).map((item) => mapPlaylistFromApi(item, maps)))
+    bumpCatalog()
+  }
+
+  function apiFailure(error, fallback) {
+    if (error instanceof ApiError) {
+      return { ok: false, error: error.message || fallback }
     }
-    setReady(true)
+    return { ok: false, error: fallback }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function boot() {
+      ensureSeedData(storage)
+      const sessionId = storage.getItem('sessionUserId')
+      if (sessionId) {
+        const users = storage.getItem('users', [])
+        const found = users.find((u) => u.id === sessionId) || null
+        setCurrentUser(found)
+      }
+      try {
+        await refreshCatalog()
+      } catch {
+        if (!cancelled) {
+          setAlbums([])
+          setTracks([])
+          setPlaylists([])
+        }
+      }
+      if (!cancelled) setReady(true)
+    }
+
+    boot()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   function getUsers() {
@@ -254,7 +312,7 @@ export function AuthProvider({ children }) {
     })
   }
 
-  function deleteAccount(userId = currentUser?.id) {
+  async function deleteAccount(userId = currentUser?.id) {
     if (!userId) {
       return { ok: false, error: t('errors.accountNotFound') }
     }
@@ -273,10 +331,13 @@ export function AuthProvider({ children }) {
       }))
     persistUsers(nextUsers)
 
-    const playlists = storage
-      .getItem('playlists', [])
-      .filter((p) => p.ownerId !== userId)
-    storage.setItem('playlists', playlists)
+    try {
+      const owned = playlists.filter((p) => idEq(p.ownerId, userId))
+      await Promise.all(owned.map((p) => catalogApi.deletePlaylist(p.id)))
+      await refreshCatalog()
+    } catch {
+      /* catalog cleanup best-effort */
+    }
 
     if (currentUser?.id === userId) {
       setSession(null)
@@ -324,18 +385,17 @@ export function AuthProvider({ children }) {
     void catalogVersion
     return {
       users: getUsers(),
-      playlists: storage.getItem('playlists', []),
-      albums: storage.getItem('albums', []),
-      tracks: storage.getItem('tracks', []),
+      playlists,
+      albums,
+      tracks,
     }
   }
 
   function getOwnedPlaylists(userId = currentUser?.id) {
     void catalogVersion
     if (!userId) return []
-    return storage
-      .getItem('playlists', [])
-      .filter((p) => p.ownerId === userId)
+    return playlists
+      .filter((p) => idEq(p.ownerId, userId))
       .map((p) => ({ ...p, trackIds: p.trackIds || [] }))
   }
 
@@ -344,7 +404,7 @@ export function AuthProvider({ children }) {
     return PLAYLIST_LIMITS[user.subscription] ?? PLAYLIST_LIMITS.basic
   }
 
-  function createPlaylist(title) {
+  async function createPlaylist(title) {
     if (!currentUser) {
       return { ok: false, error: t('errors.playlistLoginCreate') }
     }
@@ -363,22 +423,20 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const id = `pl-${Date.now()}`
-    const playlist = {
-      id,
-      title: name,
-      ownerId: currentUser.id,
-      cover: `https://picsum.photos/seed/sepatify-${id}/400/400`,
-      trackIds: [],
+    try {
+      const maps = getUserMaps()
+      const created = await catalogApi.createPlaylist({
+        title: name,
+        ownerId: toApiUserId(currentUser.id, maps),
+      })
+      await refreshCatalog()
+      return { ok: true, playlist: mapPlaylistFromApi(created, maps) }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistLoginCreate'))
     }
-
-    const playlists = storage.getItem('playlists', [])
-    storage.setItem('playlists', [playlist, ...playlists])
-    bumpCatalog()
-    return { ok: true, playlist }
   }
 
-  function renamePlaylist(playlistId, title) {
+  async function renamePlaylist(playlistId, title) {
     if (!currentUser) {
       return { ok: false, error: t('errors.playlistLoginEdit') }
     }
@@ -388,107 +446,105 @@ export function AuthProvider({ children }) {
       return { ok: false, error: t('errors.playlistNameRequired') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist || playlist.ownerId !== currentUser.id) {
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist || !idEq(playlist.ownerId, currentUser.id)) {
       return { ok: false, error: t('errors.playlistNotFound') }
     }
 
-    const next = playlists.map((p) =>
-      p.id === playlistId ? { ...p, title: name } : p,
-    )
-    storage.setItem('playlists', next)
-    bumpCatalog()
-    return { ok: true, playlist: next.find((p) => p.id === playlistId) }
+    try {
+      const updated = await catalogApi.updatePlaylist(playlistId, { title: name })
+      await refreshCatalog()
+      return { ok: true, playlist: mapPlaylistFromApi(updated, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
+    }
   }
 
-  function deletePlaylist(playlistId) {
+  async function deletePlaylist(playlistId) {
     if (!currentUser) {
       return { ok: false, error: t('errors.playlistLoginDelete') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist || playlist.ownerId !== currentUser.id) {
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist || !idEq(playlist.ownerId, currentUser.id)) {
       return { ok: false, error: t('errors.playlistNotFound') }
     }
 
-    storage.setItem(
-      'playlists',
-      playlists.filter((p) => p.id !== playlistId),
-    )
-    bumpCatalog()
-    return { ok: true }
+    try {
+      await catalogApi.deletePlaylist(playlistId)
+      await refreshCatalog()
+      return { ok: true }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
+    }
   }
 
-  function toggleTrackInPlaylist(playlistId, trackId) {
+  async function toggleTrackInPlaylist(playlistId, trackId) {
     if (!currentUser) {
       return { ok: false, error: t('errors.playlistLoginManage') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
     if (!playlist) {
       return { ok: false, error: t('errors.playlistNotFound') }
     }
-    if (playlist.ownerId !== currentUser.id) {
+    if (!idEq(playlist.ownerId, currentUser.id)) {
       return { ok: false, error: t('errors.playlistOwnedOnly') }
     }
 
     const trackIds = playlist.trackIds || []
-    const hasTrack = trackIds.includes(trackId)
-    const nextTrackIds = hasTrack
-      ? trackIds.filter((id) => id !== trackId)
-      : [...trackIds, trackId]
+    const hasTrack = trackIds.some((id) => idEq(id, trackId))
 
-    const next = playlists.map((p) =>
-      p.id === playlistId ? { ...p, trackIds: nextTrackIds } : p,
-    )
-    storage.setItem('playlists', next)
-    bumpCatalog()
-    return {
-      ok: true,
-      added: !hasTrack,
-      playlist: next.find((p) => p.id === playlistId),
+    try {
+      const updated = hasTrack
+        ? await catalogApi.removeTrackFromPlaylist(playlistId, trackId)
+        : await catalogApi.addTrackToPlaylist(playlistId, trackId)
+      await refreshCatalog()
+      return {
+        ok: true,
+        added: !hasTrack,
+        playlist: mapPlaylistFromApi(updated, getUserMaps()),
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
     }
   }
 
-  function toggleAlbumInPlaylist(playlistId, albumId) {
-    const tracks = storage.getItem('tracks', [])
-    const albumTrackIds = tracks
-      .filter((t) => t.albumId === albumId)
-      .map((t) => t.id)
+  async function toggleAlbumInPlaylist(playlistId, albumId) {
+    const albumTrackIds = tracks.filter((tr) => idEq(tr.albumId, albumId)).map((tr) => tr.id)
 
     if (albumTrackIds.length === 0) {
       return { ok: false, error: t('errors.albumHasNoTracks') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist || playlist.ownerId !== currentUser?.id) {
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist || !idEq(playlist.ownerId, currentUser?.id)) {
       return { ok: false, error: t('errors.playlistNotFound') }
     }
 
     const trackIds = playlist.trackIds || []
-    const allIn = albumTrackIds.every((id) => trackIds.includes(id))
+    const allIn = albumTrackIds.every((id) => trackIds.some((tid) => idEq(tid, id)))
 
-    let nextTrackIds
-    if (allIn) {
-      nextTrackIds = trackIds.filter((id) => !albumTrackIds.includes(id))
-    } else {
-      const missing = albumTrackIds.filter((id) => !trackIds.includes(id))
-      nextTrackIds = [...trackIds, ...missing]
-    }
-
-    const next = playlists.map((p) =>
-      p.id === playlistId ? { ...p, trackIds: nextTrackIds } : p,
-    )
-    storage.setItem('playlists', next)
-    bumpCatalog()
-    return {
-      ok: true,
-      added: !allIn,
-      playlist: next.find((p) => p.id === playlistId),
+    try {
+      if (allIn) {
+        for (const id of albumTrackIds) {
+          await catalogApi.removeTrackFromPlaylist(playlistId, id)
+        }
+      } else {
+        const missing = albumTrackIds.filter((id) => !trackIds.some((tid) => idEq(tid, id)))
+        for (const id of missing) {
+          await catalogApi.addTrackToPlaylist(playlistId, id)
+        }
+      }
+      await refreshCatalog()
+      const next = await catalogApi.getPlaylist(playlistId)
+      return {
+        ok: true,
+        added: !allIn,
+        playlist: mapPlaylistFromApi(next, getUserMaps()),
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
     }
   }
 
@@ -527,43 +583,20 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function releaseDateFromYear(year) {
-    const y = Number(year)
-    if (!Number.isFinite(y) || y < 1900 || y > 2100) {
-      return new Date().toISOString().slice(0, 10)
-    }
-    return `${Math.trunc(y)}-01-01`
-  }
-
   function estimateRevenue(plays) {
     return Math.round((Number(plays) || 0) * 42)
-  }
-
-  function stripTracksFromPlaylists(trackIds) {
-    if (!trackIds.length) return
-    const idSet = new Set(trackIds)
-    const playlists = storage.getItem('playlists', [])
-    storage.setItem(
-      'playlists',
-      playlists.map((p) => ({
-        ...p,
-        trackIds: (p.trackIds || []).filter((id) => !idSet.has(id)),
-      })),
-    )
   }
 
   function getOwnedAlbums(userId = currentUser?.id) {
     void catalogVersion
     if (!userId) return []
-    return storage.getItem('albums', []).filter((a) => a.artistId === userId)
+    return albums.filter((a) => idEq(a.artistId, userId))
   }
 
   function getOwnedSingles(userId = currentUser?.id) {
     void catalogVersion
     if (!userId) return []
-    return storage
-      .getItem('tracks', [])
-      .filter((tr) => tr.artistId === userId && !tr.albumId)
+    return tracks.filter((tr) => idEq(tr.artistId, userId) && !tr.albumId)
   }
 
   function getOwnedWorks(userId = currentUser?.id) {
@@ -577,27 +610,25 @@ export function AuthProvider({ children }) {
 
   function getAlbumStats(albumId) {
     void catalogVersion
-    const album = storage.getItem('albums', []).find((a) => a.id === albumId)
-    const tracks = storage
-      .getItem('tracks', [])
-      .filter((tr) => tr.albumId === albumId)
-    const streams = tracks.reduce((sum, tr) => sum + (tr.plays || 0), 0)
+    const album = albums.find((a) => idEq(a.id, albumId))
+    const albumTracks = tracks.filter((tr) => idEq(tr.albumId, albumId))
+    const streams = albumTracks.reduce((sum, tr) => sum + (tr.plays || 0), 0)
     const listeners = Math.max(
       album?.listeners || 0,
-      ...tracks.map((tr) => tr.listeners || 0),
+      ...albumTracks.map((tr) => tr.listeners || 0),
       0,
     )
     return {
       listeners,
       streams,
       revenue: estimateRevenue(streams),
-      trackCount: tracks.length,
+      trackCount: albumTracks.length,
     }
   }
 
   function getTrackStats(trackId) {
     void catalogVersion
-    const track = storage.getItem('tracks', []).find((tr) => tr.id === trackId)
+    const track = tracks.find((tr) => idEq(tr.id, trackId))
     const streams = track?.plays || 0
     return {
       listeners: track?.listeners || 0,
@@ -607,38 +638,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function buildTrackRecord({
-    id,
-    title,
-    albumId,
-    cover,
-    releasedAt,
-    earlyAccess,
-    genre,
-    collaborators,
-    lyrics,
-    audio,
-  }) {
-    const artistName = currentUser.artistName || currentUser.displayName
-    return {
-      id,
-      title,
-      artistId: currentUser.id,
-      artistName,
-      albumId: albumId ?? null,
-      cover,
-      plays: 0,
-      listeners: 0,
-      releasedAt,
-      earlyAccess: Boolean(earlyAccess),
-      genre: String(genre || '').trim(),
-      collaborators: parseCollaborators(collaborators),
-      lyrics: String(lyrics || ''),
-      audio: normalizeAudio(audio),
-    }
-  }
-
-  function publishWork(payload) {
+  async function publishWork(payload) {
     const gate = requireVerifiedArtist()
     if (!gate.ok) return gate
 
@@ -658,263 +658,222 @@ export function AuthProvider({ children }) {
       return { ok: false, error: t('errors.worksYearInvalid') }
     }
 
-    const releasedAt = releaseDateFromYear(year)
+    const releasedAt = yearToReleasedAt(year)
     const collaborators = parseCollaborators(payload?.collaborators)
     const earlyAccess = Boolean(payload?.earlyAccess)
-    const artistName = currentUser.artistName || currentUser.displayName
-    const coverFallback = (id) => `https://picsum.photos/seed/sepatify-${id}/400/400`
     const cover = String(payload?.cover || '').trim()
 
-    if (releaseType === 'single') {
-      const audio = normalizeAudio(payload?.audio)
-      if (!audio) {
-        return { ok: false, error: t('errors.worksAudioRequired') }
-      }
+    try {
+      const maps = getUserMaps()
+      const artistId = toApiUserId(currentUser.id, maps)
 
-      const id = `tr-${Date.now()}`
-      const track = buildTrackRecord({
-        id,
-        title,
-        albumId: null,
-        cover: cover || coverFallback(id),
-        releasedAt,
-        earlyAccess,
-        genre,
-        collaborators,
-        lyrics: payload?.lyrics,
-        audio,
-      })
+      if (releaseType === 'single') {
+        const audio = normalizeAudio(payload?.audio)
+        if (!audio) {
+          return { ok: false, error: t('errors.worksAudioRequired') }
+        }
 
-      const tracks = storage.getItem('tracks', [])
-      storage.setItem('tracks', [track, ...tracks])
-      bumpCatalog()
-      return { ok: true, kind: 'single', track }
-    }
-
-    const albumId = `al-${Date.now()}`
-    const albumCover = cover || coverFallback(albumId)
-    const album = {
-      id: albumId,
-      title,
-      artistId: currentUser.id,
-      artistName,
-      cover: albumCover,
-      releasedAt,
-      listeners: 0,
-      earlyAccess,
-      genre,
-      collaborators: [],
-    }
-
-    const inputTracks = Array.isArray(payload?.tracks) ? payload.tracks : []
-    if (inputTracks.length === 0) {
-      return { ok: false, error: t('errors.worksAlbumTracksRequired') }
-    }
-
-    const newTracks = []
-    for (let i = 0; i < inputTracks.length; i += 1) {
-      const item = inputTracks[i]
-      const trackTitle = String(item?.title ?? '').trim()
-      if (!trackTitle) {
-        return { ok: false, error: t('errors.worksTrackTitleRequired') }
-      }
-      const audio = normalizeAudio(item?.audio)
-      if (!audio) {
-        return { ok: false, error: t('errors.worksAudioRequired') }
-      }
-      const trackId = `tr-${Date.now()}-${i}`
-      newTracks.push(
-        buildTrackRecord({
-          id: trackId,
-          title: trackTitle,
-          albumId,
-          cover: albumCover,
+        const track = await catalogApi.createTrack({
+          title,
+          artistId,
+          albumId: null,
+          cover,
           releasedAt,
           earlyAccess,
           genre,
-          collaborators: item?.collaborators,
-          lyrics: item?.lyrics,
+          collaborators,
+          lyrics: payload?.lyrics || '',
           audio,
-        }),
-      )
-    }
+        })
+        await refreshCatalog()
+        return { ok: true, kind: 'single', track: mapTrackFromApi(track, getUserMaps()) }
+      }
 
-    const albums = storage.getItem('albums', [])
-    const tracks = storage.getItem('tracks', [])
-    storage.setItem('albums', [album, ...albums])
-    storage.setItem('tracks', [...newTracks, ...tracks])
-    bumpCatalog()
-    return { ok: true, kind: 'album', album, tracks: newTracks }
+      const inputTracks = Array.isArray(payload?.tracks) ? payload.tracks : []
+      if (inputTracks.length === 0) {
+        return { ok: false, error: t('errors.worksAlbumTracksRequired') }
+      }
+
+      const album = await catalogApi.createAlbum({
+        title,
+        artistId,
+        cover,
+        releasedAt,
+        earlyAccess,
+        genre,
+        collaborators: [],
+      })
+
+      const createdTracks = []
+      for (const item of inputTracks) {
+        const trackTitle = String(item?.title ?? '').trim()
+        if (!trackTitle) {
+          return { ok: false, error: t('errors.worksTrackTitleRequired') }
+        }
+        const audio = normalizeAudio(item?.audio)
+        if (!audio) {
+          return { ok: false, error: t('errors.worksAudioRequired') }
+        }
+        const track = await catalogApi.addTrackToAlbum(album.id, {
+          title: trackTitle,
+          lyrics: item?.lyrics || '',
+          audio,
+          collaborators: parseCollaborators(item?.collaborators),
+        })
+        createdTracks.push(mapTrackFromApi(track, getUserMaps()))
+      }
+
+      await refreshCatalog()
+      return {
+        ok: true,
+        kind: 'album',
+        album: mapAlbumFromApi(album, getUserMaps()),
+        tracks: createdTracks,
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksTitleRequired'))
+    }
   }
 
-  function updateAlbum(albumId, patch) {
+  async function updateAlbum(albumId, patch) {
     const gate = requireVerifiedArtist()
     if (!gate.ok) return gate
 
-    const albums = storage.getItem('albums', [])
-    const album = albums.find((a) => a.id === albumId)
-    if (!album || album.artistId !== currentUser.id) {
+    const album = albums.find((a) => idEq(a.id, albumId))
+    if (!album || !idEq(album.artistId, currentUser.id)) {
       return { ok: false, error: t('errors.worksNotFound') }
     }
 
-    const nextPatch = { ...patch }
-    if (nextPatch.title != null) {
-      const title = String(nextPatch.title).trim()
-      if (!title) return { ok: false, error: t('errors.worksTitleRequired') }
-      nextPatch.title = title
+    const body = {}
+    if (patch.title != null) {
+      const nextTitle = String(patch.title).trim()
+      if (!nextTitle) return { ok: false, error: t('errors.worksTitleRequired') }
+      body.title = nextTitle
     }
-    if (nextPatch.genre != null) {
-      const genre = String(nextPatch.genre).trim()
-      if (!genre) return { ok: false, error: t('errors.worksGenreRequired') }
-      nextPatch.genre = genre
+    if (patch.genre != null) {
+      const nextGenre = String(patch.genre).trim()
+      if (!nextGenre) return { ok: false, error: t('errors.worksGenreRequired') }
+      body.genre = nextGenre
     }
-    if (nextPatch.releaseYear != null) {
-      const year = Number(nextPatch.releaseYear)
+    if (patch.releaseYear != null) {
+      const year = Number(patch.releaseYear)
       if (!Number.isFinite(year) || year < 1900 || year > 2100) {
         return { ok: false, error: t('errors.worksYearInvalid') }
       }
-      nextPatch.releasedAt = releaseDateFromYear(year)
-      delete nextPatch.releaseYear
+      body.releasedAt = yearToReleasedAt(year)
     }
-    delete nextPatch.collaborators
-    if (nextPatch.cover != null) {
-      nextPatch.cover = String(nextPatch.cover).trim() || album.cover
+    if (patch.cover != null) {
+      body.cover = String(patch.cover).trim() || album.cover
     }
-    if (nextPatch.earlyAccess != null) {
-      nextPatch.earlyAccess = Boolean(nextPatch.earlyAccess)
+    if (patch.earlyAccess != null) {
+      body.earlyAccess = Boolean(patch.earlyAccess)
     }
 
-    const nextAlbums = albums.map((a) =>
-      a.id === albumId ? { ...a, ...nextPatch, collaborators: [] } : a,
-    )
-    storage.setItem('albums', nextAlbums)
-
-    const syncFields = {}
-    if (nextPatch.cover != null) syncFields.cover = nextPatch.cover
-    if (nextPatch.earlyAccess != null) syncFields.earlyAccess = nextPatch.earlyAccess
-    if (nextPatch.genre != null) syncFields.genre = nextPatch.genre
-    if (nextPatch.releasedAt != null) syncFields.releasedAt = nextPatch.releasedAt
-
-    if (Object.keys(syncFields).length > 0) {
-      const tracks = storage.getItem('tracks', [])
-      storage.setItem(
-        'tracks',
-        tracks.map((tr) =>
-          tr.albumId === albumId ? { ...tr, ...syncFields } : tr,
-        ),
-      )
+    try {
+      const updated = await catalogApi.updateAlbum(albumId, body)
+      await refreshCatalog()
+      return { ok: true, album: mapAlbumFromApi(updated, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
     }
-
-    bumpCatalog()
-    return { ok: true, album: nextAlbums.find((a) => a.id === albumId) }
   }
 
-  function deleteAlbum(albumId) {
+  async function deleteAlbum(albumId) {
     const gate = requireVerifiedArtist()
     if (!gate.ok) return gate
 
-    const albums = storage.getItem('albums', [])
-    const album = albums.find((a) => a.id === albumId)
-    if (!album || album.artistId !== currentUser.id) {
+    const album = albums.find((a) => idEq(a.id, albumId))
+    if (!album || !idEq(album.artistId, currentUser.id)) {
       return { ok: false, error: t('errors.worksNotFound') }
     }
 
-    const tracks = storage.getItem('tracks', [])
-    const removedIds = tracks.filter((tr) => tr.albumId === albumId).map((tr) => tr.id)
-    storage.setItem(
-      'albums',
-      albums.filter((a) => a.id !== albumId),
-    )
-    storage.setItem(
-      'tracks',
-      tracks.filter((tr) => tr.albumId !== albumId),
-    )
-    stripTracksFromPlaylists(removedIds)
-    bumpCatalog()
-    return { ok: true }
+    try {
+      await catalogApi.deleteAlbum(albumId)
+      await refreshCatalog()
+      return { ok: true }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
   }
 
-  function updateTrack(trackId, patch) {
+  async function updateTrack(trackId, patch) {
     const gate = requireVerifiedArtist()
     if (!gate.ok) return gate
 
-    const tracks = storage.getItem('tracks', [])
-    const track = tracks.find((tr) => tr.id === trackId)
-    if (!track || track.artistId !== currentUser.id) {
+    const track = tracks.find((tr) => idEq(tr.id, trackId))
+    if (!track || !idEq(track.artistId, currentUser.id)) {
       return { ok: false, error: t('errors.worksNotFound') }
     }
 
-    const nextPatch = { ...patch }
-    if (nextPatch.title != null) {
-      const title = String(nextPatch.title).trim()
-      if (!title) return { ok: false, error: t('errors.worksTrackTitleRequired') }
-      nextPatch.title = title
+    const body = {}
+    if (patch.title != null) {
+      const nextTitle = String(patch.title).trim()
+      if (!nextTitle) return { ok: false, error: t('errors.worksTrackTitleRequired') }
+      body.title = nextTitle
     }
-    if (nextPatch.genre != null) {
-      const genre = String(nextPatch.genre).trim()
-      if (!genre) return { ok: false, error: t('errors.worksGenreRequired') }
-      nextPatch.genre = genre
+    if (patch.genre != null) {
+      const nextGenre = String(patch.genre).trim()
+      if (!nextGenre) return { ok: false, error: t('errors.worksGenreRequired') }
+      body.genre = nextGenre
     }
-    if (nextPatch.releaseYear != null) {
-      const year = Number(nextPatch.releaseYear)
+    if (patch.releaseYear != null) {
+      const year = Number(patch.releaseYear)
       if (!Number.isFinite(year) || year < 1900 || year > 2100) {
         return { ok: false, error: t('errors.worksYearInvalid') }
       }
-      nextPatch.releasedAt = releaseDateFromYear(year)
-      delete nextPatch.releaseYear
+      body.releasedAt = yearToReleasedAt(year)
     }
-    if (nextPatch.collaborators != null) {
-      nextPatch.collaborators = parseCollaborators(nextPatch.collaborators)
+    if (patch.collaborators != null) {
+      body.collaborators = parseCollaborators(patch.collaborators)
     }
-    if (nextPatch.lyrics != null) {
-      nextPatch.lyrics = String(nextPatch.lyrics)
+    if (patch.lyrics != null) {
+      body.lyrics = String(patch.lyrics)
     }
-    if (nextPatch.audio != null) {
-      const audio = normalizeAudio(nextPatch.audio)
+    if (patch.audio != null) {
+      const audio = normalizeAudio(patch.audio)
       if (!audio) return { ok: false, error: t('errors.worksAudioRequired') }
-      nextPatch.audio = audio
+      body.audio = audio
     }
-    if (nextPatch.cover != null) {
-      nextPatch.cover = String(nextPatch.cover).trim() || track.cover
+    if (patch.cover != null) {
+      body.cover = String(patch.cover).trim() || track.cover
     }
-    if (nextPatch.earlyAccess != null) {
-      nextPatch.earlyAccess = Boolean(nextPatch.earlyAccess)
+    if (patch.earlyAccess != null) {
+      body.earlyAccess = Boolean(patch.earlyAccess)
     }
 
-    const nextTracks = tracks.map((tr) =>
-      tr.id === trackId ? { ...tr, ...nextPatch } : tr,
-    )
-    storage.setItem('tracks', nextTracks)
-    bumpCatalog()
-    return { ok: true, track: nextTracks.find((tr) => tr.id === trackId) }
+    try {
+      const updated = await catalogApi.updateTrack(trackId, body)
+      await refreshCatalog()
+      return { ok: true, track: mapTrackFromApi(updated, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
   }
 
-  function deleteTrack(trackId) {
+  async function deleteTrack(trackId) {
     const gate = requireVerifiedArtist()
     if (!gate.ok) return gate
 
-    const tracks = storage.getItem('tracks', [])
-    const track = tracks.find((tr) => tr.id === trackId)
-    if (!track || track.artistId !== currentUser.id) {
+    const track = tracks.find((tr) => idEq(tr.id, trackId))
+    if (!track || !idEq(track.artistId, currentUser.id)) {
       return { ok: false, error: t('errors.worksNotFound') }
     }
 
-    storage.setItem(
-      'tracks',
-      tracks.filter((tr) => tr.id !== trackId),
-    )
-    stripTracksFromPlaylists([trackId])
-    bumpCatalog()
-    return { ok: true }
+    try {
+      await catalogApi.deleteTrack(trackId)
+      await refreshCatalog()
+      return { ok: true }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
   }
 
-  function addTrackToAlbum(albumId, payload) {
+  async function addTrackToAlbum(albumId, payload) {
     const gate = requireVerifiedArtist()
     if (!gate.ok) return gate
 
-    const albums = storage.getItem('albums', [])
-    const album = albums.find((a) => a.id === albumId)
-    if (!album || album.artistId !== currentUser.id) {
+    const album = albums.find((a) => idEq(a.id, albumId))
+    if (!album || !idEq(album.artistId, currentUser.id)) {
       return { ok: false, error: t('errors.worksNotFound') }
     }
 
@@ -927,24 +886,18 @@ export function AuthProvider({ children }) {
       return { ok: false, error: t('errors.worksAudioRequired') }
     }
 
-    const id = `tr-${Date.now()}`
-    const track = buildTrackRecord({
-      id,
-      title,
-      albumId,
-      cover: album.cover,
-      releasedAt: album.releasedAt,
-      earlyAccess: album.earlyAccess,
-      genre: album.genre || payload?.genre || '',
-      collaborators: payload?.collaborators ?? [],
-      lyrics: payload?.lyrics,
-      audio,
-    })
-
-    const tracks = storage.getItem('tracks', [])
-    storage.setItem('tracks', [track, ...tracks])
-    bumpCatalog()
-    return { ok: true, track }
+    try {
+      const track = await catalogApi.addTrackToAlbum(albumId, {
+        title,
+        lyrics: payload?.lyrics || '',
+        audio,
+        collaborators: parseCollaborators(payload?.collaborators),
+      })
+      await refreshCatalog()
+      return { ok: true, track: mapTrackFromApi(track, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
   }
 
   function getAllNotifications() {

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nProvider'
+import { idEq } from '../lib/ids'
 import './PlaylistMenu.css'
 
 export default function PlaylistMenu({ mode, trackId, albumId }) {
@@ -43,29 +44,30 @@ export default function PlaylistMenu({ mode, trackId, albumId }) {
   }, [open])
 
   function albumTrackIds() {
-    return catalog.tracks.filter((track) => track.albumId === albumId).map((track) => track.id)
+    return catalog.tracks.filter((track) => idEq(track.albumId, albumId)).map((track) => track.id)
   }
 
   function isChecked(playlist) {
     const ids = playlist.trackIds || []
-    if (mode === 'track') return ids.includes(trackId)
+    if (mode === 'track') return ids.some((id) => idEq(id, trackId))
     const albumIds = albumTrackIds()
-    return albumIds.length > 0 && albumIds.every((id) => ids.includes(id))
+    return albumIds.length > 0 && albumIds.every((id) => ids.some((tid) => idEq(tid, id)))
   }
 
   function handleToggle(playlistId) {
-    const result =
+    const action =
       mode === 'track'
         ? toggleTrackInPlaylist(playlistId, trackId)
         : toggleAlbumInPlaylist(playlistId, albumId)
 
-    if (!result.ok) {
-      setMessage(result.error)
-      return
-    }
-
-    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
-    setTick((n) => n + 1)
+    Promise.resolve(action).then((result) => {
+      if (!result.ok) {
+        setMessage(result.error)
+        return
+      }
+      setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
+      setTick((n) => n + 1)
+    })
   }
 
   return (

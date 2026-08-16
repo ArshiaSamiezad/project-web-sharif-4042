@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
 import { useI18n } from '../i18n/I18nProvider'
+import { idEq } from '../lib/ids'
 import PlayingBars from '../components/PlayingBars'
 import AddTracksModal from '../components/AddTracksModal'
 import './PlaylistsPage.css'
@@ -29,13 +30,13 @@ export default function PlaylistDetailPage() {
   const [addOpen, setAddOpen] = useState(false)
 
   const catalog = getCatalog()
-  const playlist = catalog.playlists.find((item) => item.id === playlistId)
-  if (!playlist || playlist.ownerId !== currentUser?.id) {
+  const playlist = catalog.playlists.find((item) => idEq(item.id, playlistId))
+  if (!playlist || !idEq(playlist.ownerId, currentUser?.id)) {
     return <Navigate to="/playlists" replace />
   }
 
   const tracks = (playlist.trackIds || [])
-    .map((id) => catalog.tracks.find((track) => track.id === id))
+    .map((id) => catalog.tracks.find((track) => idEq(track.id, id)))
     .filter(Boolean)
 
   function artistPath(artistId) {
@@ -45,29 +46,32 @@ export default function PlaylistDetailPage() {
 
   function handleRename(event) {
     event.preventDefault()
-    const result = renamePlaylist(playlist.id, renameTitle)
-    if (!result.ok) {
-      setRenameError(result.error)
-      return
-    }
-    setRenaming(false)
-    setRenameError('')
+    renamePlaylist(playlist.id, renameTitle).then((result) => {
+      if (!result.ok) {
+        setRenameError(result.error)
+        return
+      }
+      setRenaming(false)
+      setRenameError('')
+    })
   }
 
   function handleDelete() {
     const confirmed = window.confirm(t('playlists.deleteConfirm', { title: playlist.title }))
     if (!confirmed) return
-    const result = deletePlaylist(playlist.id)
-    if (!result.ok) {
-      setActionError(result.error)
-      return
-    }
-    navigate('/playlists', { replace: true })
+    deletePlaylist(playlist.id).then((result) => {
+      if (!result.ok) {
+        setActionError(result.error)
+        return
+      }
+      navigate('/playlists', { replace: true })
+    })
   }
 
   function handleRemoveTrack(trackId) {
-    const result = toggleTrackInPlaylist(playlist.id, trackId)
-    if (!result.ok) setActionError(result.error)
+    toggleTrackInPlaylist(playlist.id, trackId).then((result) => {
+      if (!result.ok) setActionError(result.error)
+    })
   }
 
   return (

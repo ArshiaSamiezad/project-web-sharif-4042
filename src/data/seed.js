@@ -23,7 +23,7 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 10
+const SEED_VERSION = 11
 
 export const PLAYLIST_LIMITS = {
   basic: 6,
@@ -52,7 +52,7 @@ const SEED_USERS = [
     followers: ['u-gold'],
     following: ['u-gold', 'u-artist'],
     dailyStreams: 12,
-    recentPlaylistIds: ['pl-1', 'pl-3'],
+    recentPlaylistIds: [],
   },
   {
     id: 'u-gold',
@@ -68,7 +68,7 @@ const SEED_USERS = [
     followers: ['u-listener', 'u-silver'],
     following: ['u-artist'],
     dailyStreams: 40,
-    recentPlaylistIds: ['pl-2', 'pl-4'],
+    recentPlaylistIds: [],
   },
   {
     id: 'u-silver',
@@ -703,13 +703,13 @@ export function ensureSeedData(storage) {
     storage.setItem('users', [...SEED_USERS, ...customUsers])
   }
 
-  storage.setItem('playlists', SEED_PLAYLISTS)
-  storage.setItem('albums', SEED_ALBUMS)
-  storage.setItem('tracks', SEED_TRACKS)
   storage.setItem('notifications', SEED_NOTIFICATIONS)
   storage.setItem('tickets', SEED_TICKETS)
   storage.setItem('payouts', SEED_PAYOUTS)
   storage.setItem('subscriptionPrices', DEFAULT_SUBSCRIPTION_PRICES)
+  storage.removeItem('albums')
+  storage.removeItem('tracks')
+  storage.removeItem('playlists')
   storage.setItem('seeded', true)
   storage.setItem('seedVersion', SEED_VERSION)
 }

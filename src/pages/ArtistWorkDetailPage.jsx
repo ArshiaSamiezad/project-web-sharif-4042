@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nProvider'
+import { idEq } from '../lib/ids'
 import './ArtistWorksPage.css'
 
 const AUDIO_EXT = /\.(mp3|wav|flac)$/i
@@ -64,10 +65,10 @@ export default function ArtistWorkDetailPage() {
   const isAlbum = kind === 'album'
   const isSingle = kind === 'single'
 
-  const album = isAlbum ? catalog.albums.find((a) => a.id === workId) : null
-  const single = isSingle ? catalog.tracks.find((tr) => tr.id === workId) : null
-  const ownedAlbum = album && album.artistId === currentUser?.id
-  const ownedSingle = single && single.artistId === currentUser?.id && !single.albumId
+  const album = isAlbum ? catalog.albums.find((a) => idEq(a.id, workId)) : null
+  const single = isSingle ? catalog.tracks.find((tr) => idEq(tr.id, workId)) : null
+  const ownedAlbum = album && idEq(album.artistId, currentUser?.id)
+  const ownedSingle = single && idEq(single.artistId, currentUser?.id) && !single.albumId
 
   const [notice, setNotice] = useState(location.state?.notice || '')
   const [error, setError] = useState('')
@@ -101,7 +102,7 @@ export default function ArtistWorkDetailPage() {
   const work = isAlbum ? album : single
   const stats = isAlbum ? getAlbumStats(work.id) : getTrackStats(work.id)
   const albumTracks = isAlbum
-    ? catalog.tracks.filter((tr) => tr.albumId === work.id)
+    ? catalog.tracks.filter((tr) => idEq(tr.albumId, work.id))
     : []
 
   function startEdit() {
@@ -144,7 +145,7 @@ export default function ArtistWorkDetailPage() {
     setError('')
   }
 
-  function handleSave(event) {
+  async function handleSave(event) {
     event.preventDefault()
     const patch = {
       title: draft.title,
@@ -160,8 +161,8 @@ export default function ArtistWorkDetailPage() {
     }
 
     const result = isAlbum
-      ? updateAlbum(work.id, patch)
-      : updateTrack(work.id, patch)
+      ? await updateAlbum(work.id, patch)
+      : await updateTrack(work.id, patch)
 
     if (!result.ok) {
       setError(result.error)
@@ -171,10 +172,10 @@ export default function ArtistWorkDetailPage() {
     setNotice(t('works.savedOk'))
   }
 
-  function handleDeleteWork() {
+  async function handleDeleteWork() {
     const confirmed = window.confirm(t('works.deleteConfirm', { title: work.title }))
     if (!confirmed) return
-    const result = isAlbum ? deleteAlbum(work.id) : deleteTrack(work.id)
+    const result = isAlbum ? await deleteAlbum(work.id) : await deleteTrack(work.id)
     if (!result.ok) {
       setError(result.error)
       return
@@ -182,9 +183,9 @@ export default function ArtistWorkDetailPage() {
     navigate('/artist/works', { replace: true })
   }
 
-  function handleAddTrack(event) {
+  async function handleAddTrack(event) {
     event.preventDefault()
-    const result = addTrackToAlbum(work.id, trackDraft)
+    const result = await addTrackToAlbum(work.id, trackDraft)
     if (!result.ok) {
       setError(result.error)
       return
@@ -205,9 +206,9 @@ export default function ArtistWorkDetailPage() {
     setError('')
   }
 
-  function handleSaveTrack(event) {
+  async function handleSaveTrack(event) {
     event.preventDefault()
-    const result = updateTrack(editingTrackId, {
+    const result = await updateTrack(editingTrackId, {
       title: trackEdit.title,
       lyrics: trackEdit.lyrics,
       audio: trackEdit.audio,
@@ -221,10 +222,10 @@ export default function ArtistWorkDetailPage() {
     setNotice(t('works.savedOk'))
   }
 
-  function handleDeleteTrack(track) {
+  async function handleDeleteTrack(track) {
     const confirmed = window.confirm(t('works.deleteTrackConfirm', { title: track.title }))
     if (!confirmed) return
-    const result = deleteTrack(track.id)
+    const result = await deleteTrack(track.id)
     if (!result.ok) {
       setError(result.error)
       return

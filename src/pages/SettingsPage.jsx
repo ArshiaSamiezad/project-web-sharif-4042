@@ -91,9 +91,9 @@ export default function SettingsPage() {
     flashOk(t('settings.volumeSaved'))
   }
 
-  function handleDeleteAccount() {
+  async function handleDeleteAccount() {
     setDeleting(true)
-    const result = deleteAccount()
+    const result = await deleteAccount()
     setDeleting(false)
     if (!result.ok) {
       setError(result.error || t('settings.deleteFailed'))
