@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
@@ -10,6 +11,12 @@ import PlayingBars from './PlayingBars'
 import './SuggestTracksPanel.css'
 
 const VISIBLE = 5
+const SUCCESS_MS = 900
+const ERROR_MS = 1400
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
 
 export default function SuggestTracksPanel({ playlistId }) {
   const { currentUser, getCatalog, getUserById, getUserMaps, toggleTrackInPlaylist } = useAuth()
@@ -18,18 +25,20 @@ export default function SuggestTracksPanel({ playlistId }) {
   const catalog = getCatalog()
 
   const [{ visible, reserve }, setBundle] = useState({ visible: [], reserve: [] })
-  const [loading, setLoading] = useState(false)
+  const [toast, setToast] = useState(null)
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [fetched, setFetched] = useState(false)
 
   const playlist = catalog.playlists.find((item) => idEq(item.id, playlistId))
+  const busy = toast === 'loading'
 
   useEffect(() => {
     setBundle({ visible: [], reserve: [] })
     setError('')
     setFlash('')
     setFetched(false)
+    setToast(null)
   }, [playlistId])
 
   if (!playlist || !idEq(playlist.ownerId, currentUser?.id)) return null
@@ -49,7 +58,8 @@ export default function SuggestTracksPanel({ playlistId }) {
   }
 
   async function fetchSuggestions() {
-    setLoading(true)
+    if (busy) return
+    setToast('loading')
     setError('')
     setFlash('')
     try {
@@ -62,13 +72,20 @@ export default function SuggestTracksPanel({ playlistId }) {
       setFetched(true)
       if (!tracks.length) {
         setError(t('playlists.suggestEmpty'))
+        setToast('error')
+        await wait(ERROR_MS)
+        setToast(null)
+        return
       }
+      setToast('success')
+      await wait(SUCCESS_MS)
+      setToast(null)
     } catch (err) {
-      setError(err?.message || t('playlists.suggestError'))
-      setBundle({ visible: [], reserve: [] })
+      setError(t('playlists.suggestError'))
       setFetched(true)
-    } finally {
-      setLoading(false)
+      setToast('error')
+      await wait(ERROR_MS)
+      setToast(null)
     }
   }
 
@@ -96,8 +113,45 @@ export default function SuggestTracksPanel({ playlistId }) {
     })
   }
 
+  const toastNode =
+    toast && typeof document !== 'undefined'
+      ? createPortal(
+          <div className="suggest-toast" role="status" aria-live="polite">
+            <div
+              className={`suggest-toast__card suggest-toast__card--${toast}`}
+            >
+              {toast === 'loading' ? (
+                <>
+                  <span className="suggest-toast__spinner" aria-hidden="true" />
+                  <p>{t('playlists.suggestLoadingHint')}</p>
+                </>
+              ) : null}
+              {toast === 'success' ? (
+                <>
+                  <span className="suggest-toast__check" aria-hidden="true">
+                    ✓
+                  </span>
+                  <p>{t('playlists.suggestSuccess')}</p>
+                </>
+              ) : null}
+              {toast === 'error' ? (
+                <>
+                  <span className="suggest-toast__fail" aria-hidden="true">
+                    !
+                  </span>
+                  <p>{t('playlists.suggestErrorShort')}</p>
+                </>
+              ) : null}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
-    <section className="suggest-tracks" aria-labelledby="suggest-tracks-title">
+    <section className="suggest-tracks" aria-labelledby="suggest-tracks-title" aria-busy={busy}>
+      {toastNode}
+
       <div className="suggest-tracks__head">
         <div>
           <h2 id="suggest-tracks-title">{t('playlists.suggestTitle')}</h2>
@@ -105,18 +159,18 @@ export default function SuggestTracksPanel({ playlistId }) {
         </div>
         <button
           type="button"
-          className="playlists__btn playlists__btn--accent"
+          className="playlists__btn playlists__btn--accent suggest-tracks__action"
           onClick={fetchSuggestions}
-          disabled={loading}
+          disabled={busy}
         >
-          {loading ? t('playlists.suggestLoading') : t('playlists.suggestAction')}
+          {busy ? t('playlists.suggestLoading') : t('playlists.suggestAction')}
         </button>
       </div>
 
       {error ? <p className="playlists__error">{error}</p> : null}
       {flash ? <p className="suggest-tracks__flash">{flash}</p> : null}
 
-      {fetched && !loading && visible.length === 0 && !error ? (
+      {fetched && visible.length === 0 && !error && !busy ? (
         <p className="suggest-tracks__empty">{t('playlists.suggestDone')}</p>
       ) : null}
 
@@ -161,6 +215,7 @@ export default function SuggestTracksPanel({ playlistId }) {
                   type="button"
                   className="playlists__btn playlists__btn--primary"
                   onClick={() => handleAdd(track.id)}
+                  disabled={busy}
                 >
                   {t('playlists.add')}
                 </button>
