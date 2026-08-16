@@ -1,13 +1,19 @@
 from django.db import models
 
 from apps.catalog.models import Track
+from apps.common.uploads import playlist_cover_upload_to, validate_image_file
 from apps.users.models import User
 
 
 class Playlist(models.Model):
     title = models.CharField(max_length=200)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='playlists')
-    cover = models.URLField(max_length=500, blank=True, default='')
+    cover = models.ImageField(
+        upload_to=playlist_cover_upload_to,
+        blank=True,
+        null=True,
+        validators=[validate_image_file],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

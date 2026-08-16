@@ -27,15 +27,55 @@ function extractErrorMessage(payload, fallback) {
   if (typeof payload.message === 'string') return payload.message
   if (payload.error) return extractErrorMessage(payload.error.details || payload.error, fallback)
   if (Array.isArray(payload.detail)) return payload.detail.join(' ')
+
+  const parts = []
   for (const value of Object.values(payload)) {
-    if (typeof value === 'string') return value
-    if (Array.isArray(value) && value.length) return String(value[0])
-    if (value && typeof value === 'object') {
-      const nested = extractErrorMessage(value, '')
-      if (nested) return nested
+    if (typeof value === 'string') {
+      parts.push(value)
+    } else if (Array.isArray(value) && value.length) {
+      parts.push(value.map(String).join(' '))
+    } else if (value && typeof value === 'object') {
+      parts.push(extractErrorMessage(value, ''))
     }
   }
-  return fallback
+  return parts.filter(Boolean).join(' | ') || fallback
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && Object.getPrototypeOf(value) === Object.prototype
+}
+
+export function toFormData(payload = {}) {
+  const formData = new FormData()
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return
+    if (typeof File !== 'undefined' && value instanceof File) {
+      formData.append(key, value, value.name)
+      return
+    }
+    if (typeof Blob !== 'undefined' && value instanceof Blob) {
+      formData.append(key, value)
+      return
+    }
+    if (Array.isArray(value) || isPlainObject(value)) {
+      formData.append(key, JSON.stringify(value))
+      return
+    }
+    if (typeof value === 'boolean') {
+      formData.append(key, value ? 'true' : 'false')
+      return
+    }
+    formData.append(key, String(value))
+  })
+  return formData
+}
+
+function hasBinary(payload) {
+  if (!payload || typeof payload !== 'object') return false
+  return Object.values(payload).some((value) => {
+    if (typeof File !== 'undefined' && value instanceof File) return true
+    return typeof Blob !== 'undefined' && value instanceof Blob
+  })
 }
 
 async function readPayload(response) {
@@ -71,26 +111,36 @@ async function refreshAccess() {
 
 export async function api(
   path,
-  { method = 'GET', body, signal, headers: suppliedHeaders } = {},
+  { method = 'GET', body, signal, formData, headers: suppliedHeaders } = {},
   retry = true,
 ) {
-  const isFormData = body instanceof FormData
-  const headers = {
-    ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-    ...suppliedHeaders,
-  }
+  const headers = { ...suppliedHeaders }
   const access = localStorage.getItem(ACCESS_KEY)
   if (access) headers.Authorization = `Bearer ${access}`
+
+  let requestBody
+  if (formData) {
+    requestBody = formData
+  } else if (body instanceof FormData) {
+    requestBody = body
+  } else if (body !== undefined) {
+    if (hasBinary(body)) {
+      requestBody = toFormData(body)
+    } else {
+      headers['Content-Type'] = 'application/json'
+      requestBody = JSON.stringify(body)
+    }
+  }
 
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     signal,
     headers,
-    body: body && !isFormData ? JSON.stringify(body) : body,
+    body: requestBody,
   })
 
   if (response.status === 401 && retry && (await refreshAccess())) {
-    return api(path, { method, body, signal, headers: suppliedHeaders }, false)
+    return api(path, { method, body, signal, formData, headers: suppliedHeaders }, false)
   }
 
   const payload = await readPayload(response)
@@ -143,6 +193,9 @@ async function listAll(path) {
 
 export const catalogApi = {
   listUsers: () => listAll('/users/'),
+  createUser: (payload) => api('/users/', { method: 'POST', body: payload }),
+  updateUser: (id, payload) => api(`/users/${id}/`, { method: 'PATCH', body: payload }),
+
   listAlbums: (params = {}) => {
     const query = new URLSearchParams(params).toString()
     return listAll(`/albums/${query ? `?${query}` : ''}`)
@@ -179,4 +232,6 @@ export const catalogApi = {
     }),
   removeTrackFromPlaylist: (playlistId, trackId) =>
     api(`/playlists/${playlistId}/tracks/${trackId}/`, { method: 'DELETE' }),
+  recommendPlaylistTracks: (playlistId) =>
+    api(`/playlists/${playlistId}/recommend/`, { method: 'POST' }),
 }

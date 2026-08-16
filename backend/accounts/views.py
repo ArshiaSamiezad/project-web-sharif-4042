@@ -8,7 +8,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -32,6 +32,7 @@ class ArtistRegisterView(ListenerRegisterView):
 
 class MeView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
     def get_object(self): return self.request.user
     def perform_destroy(self, instance):
         from apps.users.models import User as CatalogUser
@@ -40,9 +41,12 @@ class MeView(generics.RetrieveUpdateDestroyAPIView):
 
 class PreferenceView(generics.RetrieveUpdateAPIView):
     serializer_class = PreferenceSerializer
+    permission_classes = [IsAuthenticated]
     def get_object(self): return UserPreference.objects.get_or_create(user=self.request.user)[0]
 
 class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         token = request.data.get("refresh")
         if not token: return Response({"refresh": ["This field is required."]}, status=400)

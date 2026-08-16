@@ -127,12 +127,12 @@ export default function ArtistWorkDetailPage() {
       setError(t('errors.worksCoverFormat'))
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      setDraft((prev) => ({ ...prev, cover: String(reader.result) }))
-      setError('')
-    }
-    reader.readAsDataURL(file)
+    setDraft((prev) => ({
+      ...prev,
+      cover: URL.createObjectURL(file),
+      coverFile: file,
+    }))
+    setError('')
   }
 
   function handleAudioFile(file, setter) {
@@ -141,7 +141,7 @@ export default function ArtistWorkDetailPage() {
       setError(t('errors.worksAudioFormat'))
       return
     }
-    setter((prev) => ({ ...prev, audio: fileMeta(file) }))
+    setter((prev) => ({ ...prev, audio: file }))
     setError('')
   }
 
@@ -151,13 +151,16 @@ export default function ArtistWorkDetailPage() {
       title: draft.title,
       genre: draft.genre,
       releaseYear: draft.releaseYear,
-      cover: draft.cover,
       earlyAccess: draft.earlyAccess,
+    }
+    if (draft.coverFile) {
+      patch.cover = draft.coverFile
+      patch.coverFile = draft.coverFile
     }
     if (isSingle) {
       patch.collaborators = draft.collaborators
       patch.lyrics = draft.lyrics
-      if (draft.audio) patch.audio = draft.audio
+      if (draft.audio instanceof File) patch.audio = draft.audio
     }
 
     const result = isAlbum
@@ -208,12 +211,15 @@ export default function ArtistWorkDetailPage() {
 
   async function handleSaveTrack(event) {
     event.preventDefault()
-    const result = await updateTrack(editingTrackId, {
+    const patch = {
       title: trackEdit.title,
       lyrics: trackEdit.lyrics,
-      audio: trackEdit.audio,
       collaborators: trackEdit.collaborators,
-    })
+    }
+    if (trackEdit.audio instanceof File) {
+      patch.audio = trackEdit.audio
+    }
+    const result = await updateTrack(editingTrackId, patch)
     if (!result.ok) {
       setError(result.error)
       return

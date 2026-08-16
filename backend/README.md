@@ -1,63 +1,60 @@
 # Sepatify Backend
 
-Django REST API for albums, tracks, and playlists (aligned with the frontend data shape).
+Django REST API for albums, tracks, playlists, and media uploads.
 
 ## Setup
 
 ```bash
 cd backend
 python -m pip install -r requirements.txt
+copy .env.example .env   # set GEMINI_API_KEY
 python manage.py migrate
 python manage.py seed_demo
 python manage.py runserver
 ```
 
 API base: `http://127.0.0.1:8000/api/`
+Media files: `http://127.0.0.1:8000/media/` (stored under `backend/media/`)
+
+Gemini recommendations need `GEMINI_API_KEY` in `backend/.env` (see `.env.example`).
+
+## Media layout
+
+| Type | Path |
+|------|------|
+| User avatars | `media/avatars/<user_id>/` |
+| Album covers | `media/covers/albums/<artist_id>/` |
+| Track covers | `media/covers/tracks/<artist_id>/` |
+| Playlist covers | `media/covers/playlists/<owner_id>/` |
+| Audio files | `media/audio/<artist_id>/` |
+
+Accepted images: JPEG / PNG
+Accepted audio: MP3 / WAV / FLAC
+
+Upload with `multipart/form-data`. Response fields `cover`, `avatar`, and `audioUrl` are absolute URLs.
 
 ## Endpoints
 
-### Users (read-only, for FK mapping)
+### Users
 - `GET /api/users/`
 - `GET /api/users/{id}/`
+- `PATCH /api/users/{id}/` — upload `avatar` file
 
 ### Albums
-- `GET /api/albums/`
-- `POST /api/albums/`
-- `GET /api/albums/{id}/`
-- `PATCH /api/albums/{id}/`
-- `DELETE /api/albums/{id}/`
-- `POST /api/albums/{id}/tracks/` — add a track to an album
-- Query: `?artistId=`
+- CRUD + `POST /api/albums/{id}/tracks/`
+- Optional file field: `cover`
 
 ### Tracks
-- `GET /api/tracks/`
-- `POST /api/tracks/`
-- `GET /api/tracks/{id}/`
-- `PATCH /api/tracks/{id}/`
-- `DELETE /api/tracks/{id}/`
-- Query: `?artistId=` `?albumId=` `?single=true`
+- CRUD
+- Write file field: `audioFile` (required on create)
+- Optional file field: `cover`
+- Read: `audioUrl`, `audio` (`{name,size,type}`)
 
 ### Playlists
-- `GET /api/playlists/`
-- `POST /api/playlists/`
-- `GET /api/playlists/{id}/`
-- `PATCH /api/playlists/{id}/` — rename / update cover
-- `DELETE /api/playlists/{id}/`
-- `POST /api/playlists/{id}/tracks/` — body: `{ "trackId": 1 }`
-- `DELETE /api/playlists/{id}/tracks/{track_id}/`
-- Query: `?ownerId=`
+- CRUD + add/remove tracks
+- Optional file field: `cover`
+- `POST /api/playlists/{id}/recommend/` — Gemini picks 10 catalog track IDs (UI shows 5, keeps 5 in reserve)
 
-JSON field names match the frontend (`artistId`, `releasedAt`, `trackIds`, `audio`, …).
+## Frontend
 
-User model exists for relations; auth endpoints are intentionally not implemented in this phase.
-
-## Frontend wiring
-
-The React app loads albums/tracks/playlists from this API via `src/lib/api.js`.
-Users are still local (Local Storage); emails must match `seed_demo` so `artistId`/`ownerId` can be mapped.
-
-Run backend first, then:
-
-```bash
-npm run dev
-```
+Vite proxies `/api` and `/media` to Django. Run backend first, then `npm run dev`.

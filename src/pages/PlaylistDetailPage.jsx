@@ -6,6 +6,7 @@ import { useI18n } from '../i18n/I18nProvider'
 import { idEq } from '../lib/ids'
 import PlayingBars from '../components/PlayingBars'
 import AddTracksModal from '../components/AddTracksModal'
+import SuggestTracksPanel from '../components/SuggestTracksPanel'
 import './PlaylistsPage.css'
 import './CatalogPages.css'
 
@@ -222,6 +223,8 @@ export default function PlaylistDetailPage() {
           })}
         </ul>
       )}
+
+      <SuggestTracksPanel playlistId={playlist.id} />
 
       <AddTracksModal
         open={addOpen}
