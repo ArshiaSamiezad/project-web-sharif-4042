@@ -1,3 +1,5 @@
+import { t } from '../i18n/translations'
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function isValidEmail(value) {
@@ -5,20 +7,17 @@ export function isValidEmail(value) {
   return EMAIL_RE.test(email)
 }
 
-export function validateEmailField(email, { requiredMessage = 'ایمیل را وارد کنید.' } = {}) {
+export function validateEmailField(email) {
   const trimmed = String(email ?? '').trim()
-  if (!trimmed) return requiredMessage
-  if (!isValidEmail(trimmed)) return 'فرمت ایمیل معتبر نیست.'
+  if (!trimmed) return t('validation.emailRequired')
+  if (!isValidEmail(trimmed)) return t('validation.emailInvalid')
   return null
 }
 
-export function validatePasswordField(
-  password,
-  { requiredMessage = 'رمز عبور را وارد کنید.', minLength = 6 } = {},
-) {
+export function validatePasswordField(password, { minLength = 6 } = {}) {
   const value = String(password ?? '')
-  if (!value) return requiredMessage
-  if (value.length < minLength) return `رمز عبور باید حداقل ${minLength} کاراکتر باشد.`
+  if (!value) return t('validation.passwordRequired')
+  if (value.length < minLength) return t('validation.passwordMin', { min: minLength })
   return null
 }
 
@@ -26,10 +25,7 @@ export function validateLogin({ email, password }) {
   const emailError = validateEmailField(email)
   if (emailError) return emailError
 
-  const passwordError = validatePasswordField(password, {
-    requiredMessage: 'رمز عبور را وارد کنید.',
-    minLength: 1,
-  })
+  const passwordError = validatePasswordField(password, { minLength: 1 })
   if (passwordError) return passwordError
 
   return null
@@ -41,7 +37,7 @@ export function validatePasswordReset({ email }) {
 
 export function validateListenerSignup(data) {
   if (!String(data.displayName ?? '').trim()) {
-    return 'نام نمایشی را وارد کنید.'
+    return t('validation.displayNameRequired')
   }
 
   const emailError = validateEmailField(data.email)
@@ -51,31 +47,31 @@ export function validateListenerSignup(data) {
   if (passwordError) return passwordError
 
   if (!String(data.confirmPassword ?? '')) {
-    return 'تأیید رمز عبور را وارد کنید.'
+    return t('validation.confirmRequired')
   }
   if (data.password !== data.confirmPassword) {
-    return 'رمز عبور و تأیید آن یکسان نیستند.'
+    return t('validation.confirmMismatch')
   }
 
   if (!data.birthDate) {
-    return 'تاریخ تولد را وارد کنید.'
+    return t('validation.birthRequired')
   }
   const birth = new Date(data.birthDate)
   if (Number.isNaN(birth.getTime())) {
-    return 'تاریخ تولد معتبر نیست.'
+    return t('validation.birthInvalid')
   }
   const today = new Date()
   today.setHours(23, 59, 59, 999)
   if (birth > today) {
-    return 'تاریخ تولد نمی‌تواند در آینده باشد.'
+    return t('validation.birthFuture')
   }
 
   if (!data.gender) {
-    return 'جنسیت را انتخاب کنید.'
+    return t('validation.genderRequired')
   }
 
   if (!data.acceptedPrivacy) {
-    return 'پذیرش سیاست حریم خصوصی الزامی است.'
+    return t('validation.privacyRequired')
   }
 
   return null
@@ -89,18 +85,18 @@ export function validateArtistSignup(data) {
   if (passwordError) return passwordError
 
   if (!String(data.confirmPassword ?? '')) {
-    return 'تأیید رمز عبور را وارد کنید.'
+    return t('validation.confirmRequired')
   }
   if (data.password !== data.confirmPassword) {
-    return 'رمز عبور و تأیید آن یکسان نیستند.'
+    return t('validation.confirmMismatch')
   }
 
   if (!String(data.artistName ?? '').trim()) {
-    return 'نام هنری را وارد کنید.'
+    return t('validation.artistNameRequired')
   }
 
   if (!data.samples?.length) {
-    return 'حداقل یک نمونه کار اضافه کنید.'
+    return t('validation.samplesRequired')
   }
 
   return null

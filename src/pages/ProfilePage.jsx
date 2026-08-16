@@ -2,26 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
+import { useI18n } from '../i18n/I18nProvider'
 import PlayingBars from '../components/PlayingBars'
 import './ProfilePage.css'
-
-const GENDER_LABELS = {
-  female: 'زن',
-  male: 'مرد',
-  other: 'سایر',
-  unspecified: 'ترجیح می‌دهم نگویم',
-}
-
-function subscriptionLabel(type) {
-  switch (type) {
-    case 'gold':
-      return 'طلایی'
-    case 'silver':
-      return 'نقره‌ای'
-    default:
-      return 'عادی (پایه)'
-  }
-}
 
 function canChangeAvatar(subscription) {
   return subscription === 'gold' || subscription === 'silver'
@@ -41,6 +24,7 @@ export default function ProfilePage() {
     defaultAvatar,
   } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
+  const { t, formatNumber, subscriptionLabel, genderLabel, language } = useI18n()
 
   const profile = usernameParam ? getUserByUsername(usernameParam) : currentUser
   const isOwn = Boolean(profile && profile.id === currentUser.id)
@@ -65,8 +49,8 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="profile">
-        <p className="profile__error">کاربر پیدا نشد.</p>
-        <Link to="/profile">بازگشت به نمایه من</Link>
+        <p className="profile__error">{t('profile.notFound')}</p>
+        <Link to="/profile">{t('profile.backToMine')}</Link>
       </div>
     )
   }
@@ -85,21 +69,21 @@ export default function ProfilePage() {
     : []
   const artistSingles = isArtist
     ? catalog.tracks.filter(
-        (t) =>
-          t.artistId === liveProfile.id &&
-          !t.albumId &&
-          (viewerIsGold || !t.earlyAccess),
+        (track) =>
+          track.artistId === liveProfile.id &&
+          !track.albumId &&
+          (viewerIsGold || !track.earlyAccess),
       )
     : []
   const artistTracks = isArtist
-    ? catalog.tracks.filter((t) => t.artistId === liveProfile.id)
+    ? catalog.tracks.filter((tr) => tr.artistId === liveProfile.id)
     : []
-  const totalStreams = artistTracks.reduce((sum, t) => sum + (t.plays || 0), 0)
+  const totalStreams = artistTracks.reduce((sum, tr) => sum + (tr.plays || 0), 0)
   const totalListeners = liveProfile.followers?.length ?? 0
 
   function applyUpdate(result, { forUsername = false } = {}) {
     if (!result.ok) {
-      const text = result.error || 'ذخیره انجام نشد.'
+      const text = result.error || t('profile.saveFailed')
       if (forUsername) setUsernameError(text)
       else setError(text)
       return false
@@ -146,7 +130,7 @@ export default function ProfilePage() {
 
     if (editing === 'personal') {
       if (!draft.displayName.trim()) {
-        setError('نام نمایشی نمی‌تواند خالی باشد.')
+        setError(t('profile.displayNameRequired'))
         return
       }
       if (
@@ -160,27 +144,27 @@ export default function ProfilePage() {
       ) {
         return
       }
-      setMessage('اطلاعات شخصی ذخیره شد.')
+      setMessage(t('profile.saved'))
     }
 
     if (editing === 'username') {
       const username = draft.username.trim()
       if (!username) {
-        setUsernameError('نام کاربری نمی‌تواند خالی باشد.')
+        setUsernameError(t('profile.usernameRequired'))
         return
       }
       if (!/^[a-zA-Z0-9._]{3,20}$/.test(username)) {
-        setUsernameError('نام کاربری باید ۳ تا ۲۰ کاراکتر انگلیسی/عدد/نقطه/زیرخط باشد.')
+        setUsernameError(t('profile.usernameInvalid'))
         return
       }
       if (isUsernameTaken(username, liveProfile.id)) {
-        setUsernameError('این نام کاربری قبلاً استفاده شده است.')
+        setUsernameError(t('errors.usernameTaken'))
         return
       }
       if (!applyUpdate(await updateUser(liveProfile.id, { username }), { forUsername: true })) {
         return
       }
-      setMessage('نام کاربری ذخیره شد.')
+      setMessage(t('profile.saved'))
       if (usernameParam) {
         navigate(`/profile/${username}`, { replace: true })
       }
@@ -189,24 +173,24 @@ export default function ProfilePage() {
       if (!applyUpdate(await updateUser(liveProfile.id, { subscription: draft.subscription }))) {
         return
       }
-      setMessage('نوع اشتراک به‌روز شد.')
+      setMessage(t('profile.saved'))
     }
 
     if (editing === 'dailyStreams') {
       const value = Number(draft.dailyStreams)
       if (!Number.isFinite(value) || value < 0) {
-        setError('عدد استریم روزانه معتبر نیست.')
+        setError(t('profile.dailyStreamsInvalid'))
         return
       }
       if (!applyUpdate(await updateUser(liveProfile.id, { dailyStreams: Math.floor(value) }))) {
         return
       }
-      setMessage('آمار استریم روزانه ذخیره شد.')
+      setMessage(t('profile.saved'))
     }
 
     if (editing === 'avatar') {
       if (!canChangeAvatar(currentUser.subscription)) {
-        setError('با اشتراک پایه امکان تغییر عکس پروفایل وجود ندارد.')
+        setError(t('profile.avatarBlocked'))
         return
       }
       if (
@@ -218,7 +202,7 @@ export default function ProfilePage() {
       ) {
         return
       }
-      setMessage('عکس پروفایل ذخیره شد.')
+      setMessage(t('profile.saved'))
     }
 
     if (editing === 'bio') {
@@ -231,7 +215,7 @@ export default function ProfilePage() {
       ) {
         return
       }
-      setMessage('بیوگرافی ذخیره شد.')
+      setMessage(t('profile.saved'))
     }
 
     setEditing(null)
@@ -241,7 +225,7 @@ export default function ProfilePage() {
   function handleAvatarFile(file) {
     if (!file) return
     if (!canChangeAvatar(currentUser.subscription)) {
-      setError('با اشتراک پایه امکان آپلود عکس پروفایل وجود ندارد.')
+      setError(t('profile.avatarBlocked'))
       return
     }
     const reader = new FileReader()
@@ -249,7 +233,7 @@ export default function ProfilePage() {
       if (!applyUpdate(await updateUser(liveProfile.id, { avatar: String(reader.result) }))) {
         return
       }
-      setMessage('عکس پروفایل آپلود شد.')
+      setMessage(t('profile.saved'))
       setEditing(null)
     }
     reader.readAsDataURL(file)
@@ -262,7 +246,7 @@ export default function ProfilePage() {
       return
     }
     refresh()
-    setMessage(result.following ? 'این کاربر را دنبال کردید.' : 'دنبال کردن لغو شد.')
+    setMessage(result.following ? t('profile.followOk') : t('profile.unfollowOk'))
   }
 
   return (
@@ -279,8 +263,8 @@ export default function ProfilePage() {
           <h1 className="profile__title">
             <span>{liveProfile.artistName || liveProfile.displayName}</span>
             {isVerifiedArtist ? (
-              <span className="profile__verified" title="هنرمند تأییدشده">
-                نشان هنرمند تأییدشده
+              <span className="profile__verified" title={t('profile.verifiedTitle')}>
+                {t('profile.verified')}
               </span>
             ) : null}
           </h1>
@@ -288,7 +272,7 @@ export default function ProfilePage() {
             @{liveProfile.username}
           </p>
           {isArtist && liveProfile.status === 'pending' ? (
-            <span className="profile__plan">در انتظار تأیید</span>
+            <span className="profile__plan">{t('profile.pending')}</span>
           ) : (
             <span className={`profile__plan profile__plan--${liveProfile.subscription || 'basic'}`}>
               {subscriptionLabel(liveProfile.subscription)}
@@ -296,9 +280,14 @@ export default function ProfilePage() {
           )}
         </div>
         <div className="profile__hero-actions">
+          {isOwn && isVerifiedArtist ? (
+            <Link to="/artist/works" className="profile__btn">
+              {t('profile.manageWorks')}
+            </Link>
+          ) : null}
           {!isOwn ? (
             <button type="button" className="profile__btn" onClick={handleFollow}>
-              {isFollowing ? 'لغو دنبال کردن' : 'دنبال کردن'}
+              {isFollowing ? t('profile.unfollow') : t('profile.follow')}
             </button>
           ) : null}
         </div>
@@ -315,18 +304,18 @@ export default function ProfilePage() {
         </p>
       ) : null}
 
-      <section className="profile__stats" aria-label="آمار">
+      <section className="profile__stats" aria-label={t('profile.statsAria')}>
         <div>
-          <strong>{liveProfile.followers?.length ?? 0}</strong>
-          <span>فالوور</span>
+          <strong>{formatNumber(liveProfile.followers?.length ?? 0)}</strong>
+          <span>{t('profile.followers')}</span>
         </div>
         <div>
-          <strong>{liveProfile.following?.length ?? 0}</strong>
-          <span>فالویینگ</span>
+          <strong>{formatNumber(liveProfile.following?.length ?? 0)}</strong>
+          <span>{t('profile.following')}</span>
         </div>
         <div>
-          <strong>{liveProfile.dailyStreams ?? 0}</strong>
-          <span>استریم امروز</span>
+          <strong>{formatNumber(liveProfile.dailyStreams ?? 0)}</strong>
+          <span>{t('profile.streamsToday')}</span>
         </div>
       </section>
 
@@ -334,17 +323,17 @@ export default function ProfilePage() {
         <>
           <section className="profile__card">
             <div className="profile__card-head">
-              <h2>بیوگرافی</h2>
+              <h2>{t('profile.bio')}</h2>
               {isOwn && editing !== 'bio' ? (
                 <button type="button" className="profile__link-btn" onClick={() => startEdit('bio')}>
-                  ویرایش
+                  {t('common.edit')}
                 </button>
               ) : null}
             </div>
             {editing === 'bio' ? (
               <form className="profile__form" onSubmit={saveEdit}>
                 <label className="profile__form-span">
-                  متن بیوگرافی
+                  {t('profile.bioLabel')}
                   <textarea
                     rows={4}
                     value={draft.bio}
@@ -353,31 +342,31 @@ export default function ProfilePage() {
                 </label>
                 <div className="profile__form-actions">
                   <button type="submit" className="profile__btn">
-                    ذخیره
+                    {t('common.save')}
                   </button>
                   <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                    انصراف
+                    {t('common.cancel')}
                   </button>
                 </div>
               </form>
             ) : (
-              <p className="profile__hint">{liveProfile.bio || 'بیوگرافی ثبت نشده است.'}</p>
+              <p className="profile__hint">{liveProfile.bio || t('profile.bioEmpty')}</p>
             )}
           </section>
 
           {viewerIsGold ? (
             <section className="profile__card profile__card--gold-stats">
               <div className="profile__card-head">
-                <h2>آمار کلی (ویژه طلایی)</h2>
+                <h2>{t('profile.goldStats')}</h2>
               </div>
               <div className="profile__stats profile__stats--nested">
                 <div>
-                  <strong>{totalListeners.toLocaleString('fa-IR')}</strong>
-                  <span>شنوندگان</span>
+                  <strong>{formatNumber(totalListeners)}</strong>
+                  <span>{t('profile.listeners')}</span>
                 </div>
                 <div>
-                  <strong>{totalStreams.toLocaleString('fa-IR')}</strong>
-                  <span>مجموع استریم‌ها</span>
+                  <strong>{formatNumber(totalStreams)}</strong>
+                  <span>{t('profile.totalStreams')}</span>
                 </div>
               </div>
             </section>
@@ -385,10 +374,10 @@ export default function ProfilePage() {
 
           <section className="profile__card">
             <div className="profile__card-head">
-              <h2>آلبوم‌ها</h2>
+              <h2>{t('profile.albums')}</h2>
             </div>
             {artistAlbums.length === 0 ? (
-              <p className="profile__hint">هنوز آلبومی منتشر نشده است.</p>
+              <p className="profile__hint">{t('profile.albumsEmpty')}</p>
             ) : (
               <div className="profile__releases">
                 {artistAlbums.map((album) => (
@@ -397,7 +386,7 @@ export default function ProfilePage() {
                       type="button"
                       className="profile__release-cover"
                       onClick={() => navigate(`/album/${album.id}`)}
-                      aria-label={`باز کردن آلبوم ${album.title}`}
+                      aria-label={t('common.openAlbumAria', { title: album.title })}
                     >
                       <img src={album.cover} alt="" />
                     </button>
@@ -408,7 +397,12 @@ export default function ProfilePage() {
                     >
                       {album.title}
                     </button>
-                    <p>{(album.listeners || 0).toLocaleString('fa-IR')} شنونده</p>
+                    {album.genre ? <p className="profile__release-genre">{album.genre}</p> : null}
+                    <p>
+                      {t('common.listenerCount', {
+                        count: formatNumber(album.listeners || 0),
+                      })}
+                    </p>
                   </article>
                 ))}
               </div>
@@ -417,10 +411,10 @@ export default function ProfilePage() {
 
           <section className="profile__card">
             <div className="profile__card-head">
-              <h2>تک‌آهنگ‌ها</h2>
+              <h2>{t('profile.singles')}</h2>
             </div>
             {artistSingles.length === 0 ? (
-              <p className="profile__hint">هنوز تک‌آهنگی منتشر نشده است.</p>
+              <p className="profile__hint">{t('profile.singlesEmpty')}</p>
             ) : (
               <div className="profile__releases">
                 {artistSingles.map((track) => {
@@ -434,13 +428,17 @@ export default function ProfilePage() {
                         type="button"
                         className="profile__release-cover"
                         onClick={() => playTrack(track.id)}
-                        aria-label={isPlaying ? `توقف ${track.title}` : `پخش ${track.title}`}
+                        aria-label={
+                          isPlaying
+                            ? t('common.pauseAria', { title: track.title })
+                            : t('common.playAria', { title: track.title })
+                        }
                       >
                         <img src={track.cover} alt="" />
                         {isPlaying ? (
                           <span className="profile__playing">
                             <PlayingBars />
-                            <span>در حال پخش</span>
+                            <span>{t('common.nowPlaying')}</span>
                           </span>
                         ) : (
                           <span className="profile__play-hint" aria-hidden="true">
@@ -455,7 +453,19 @@ export default function ProfilePage() {
                       >
                         {track.title}
                       </button>
-                      <p>{(track.listeners || track.plays || 0).toLocaleString('fa-IR')} شنونده</p>
+                      {track.genre ? <p className="profile__release-genre">{track.genre}</p> : null}
+                      {Array.isArray(track.collaborators) && track.collaborators.length > 0 ? (
+                        <p className="profile__release-genre">
+                          {t('common.featuring', {
+                            names: track.collaborators.join(language === 'en' ? ', ' : '، '),
+                          })}
+                        </p>
+                      ) : null}
+                      <p>
+                        {t('common.listenerCount', {
+                          count: formatNumber(track.listeners || track.plays || 0),
+                        })}
+                      </p>
                     </article>
                   )
                 })}
@@ -467,24 +477,24 @@ export default function ProfilePage() {
 
       <section className="profile__card">
         <div className="profile__card-head">
-          <h2>اطلاعات شخصی</h2>
+          <h2>{t('profile.personal')}</h2>
           {isOwn && editing !== 'personal' ? (
             <button type="button" className="profile__link-btn" onClick={() => startEdit('personal')}>
-              ویرایش
+              {t('common.edit')}
             </button>
           ) : null}
         </div>
         {editing === 'personal' ? (
           <form className="profile__form" onSubmit={saveEdit}>
             <label>
-              نام نمایشی
+              {t('auth.displayName')}
               <input
                 value={draft.displayName}
                 onChange={(e) => setDraft((d) => ({ ...d, displayName: e.target.value }))}
               />
             </label>
             <label>
-              تاریخ تولد
+              {t('auth.birthDate')}
               <input
                 type="date"
                 dir="ltr"
@@ -493,43 +503,43 @@ export default function ProfilePage() {
               />
             </label>
             <label>
-              جنسیت
+              {t('auth.gender')}
               <select
                 value={draft.gender}
                 onChange={(e) => setDraft((d) => ({ ...d, gender: e.target.value }))}
               >
-                <option value="">انتخاب کنید</option>
-                <option value="female">زن</option>
-                <option value="male">مرد</option>
-                <option value="other">سایر</option>
-                <option value="unspecified">ترجیح می‌دهم نگویم</option>
+                <option value="">{t('common.genderPlaceholder')}</option>
+                <option value="female">{genderLabel('female')}</option>
+                <option value="male">{genderLabel('male')}</option>
+                <option value="other">{genderLabel('other')}</option>
+                <option value="unspecified">{genderLabel('unspecified')}</option>
               </select>
             </label>
             <div className="profile__form-actions">
               <button type="submit" className="profile__btn">
-                ذخیره
+                {t('common.save')}
               </button>
               <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                انصراف
+                {t('common.cancel')}
               </button>
             </div>
           </form>
         ) : (
           <dl className="profile__dl">
             <div>
-              <dt>نام نمایشی</dt>
+              <dt>{t('auth.displayName')}</dt>
               <dd>{liveProfile.displayName}</dd>
             </div>
             <div>
-              <dt>تاریخ تولد</dt>
+              <dt>{t('auth.birthDate')}</dt>
               <dd dir="ltr">{liveProfile.birthDate || '—'}</dd>
             </div>
             <div>
-              <dt>جنسیت</dt>
-              <dd>{GENDER_LABELS[liveProfile.gender] || '—'}</dd>
+              <dt>{t('auth.gender')}</dt>
+              <dd>{genderLabel(liveProfile.gender)}</dd>
             </div>
             <div>
-              <dt>ایمیل</dt>
+              <dt>{t('auth.email')}</dt>
               <dd dir="ltr">{liveProfile.email}</dd>
             </div>
           </dl>
@@ -538,17 +548,17 @@ export default function ProfilePage() {
 
       <section className="profile__card">
         <div className="profile__card-head">
-          <h2>نام کاربری سامانه</h2>
+          <h2>{t('profile.username')}</h2>
           {isOwn && editing !== 'username' ? (
             <button type="button" className="profile__link-btn" onClick={() => startEdit('username')}>
-              ویرایش
+              {t('common.edit')}
             </button>
           ) : null}
         </div>
         {editing === 'username' ? (
           <form className="profile__form" onSubmit={saveEdit}>
             <label>
-              نام کاربری
+              {t('profile.usernameField')}
               <input
                 dir="ltr"
                 value={draft.username}
@@ -565,10 +575,10 @@ export default function ProfilePage() {
             ) : null}
             <div className="profile__form-actions">
               <button type="submit" className="profile__btn">
-                ذخیره
+                {t('common.save')}
               </button>
               <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                انصراف
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -581,10 +591,10 @@ export default function ProfilePage() {
 
       <section className="profile__card">
         <div className="profile__card-head">
-          <h2>عکس پروفایل</h2>
+          <h2>{t('profile.avatar')}</h2>
           {isOwn && editing !== 'avatar' ? (
             <button type="button" className="profile__link-btn" onClick={() => startEdit('avatar')}>
-              ویرایش
+              {t('common.edit')}
             </button>
           ) : null}
         </div>
@@ -593,7 +603,7 @@ export default function ProfilePage() {
             {avatarEditable ? (
               <>
                 <label>
-                  آپلود تصویر
+                  {t('profile.uploadImage')}
                   <input
                     type="file"
                     accept="image/*"
@@ -601,7 +611,7 @@ export default function ProfilePage() {
                   />
                 </label>
                 <label>
-                  یا نشانی تصویر
+                  {t('profile.orImageUrl')}
                   <input
                     dir="ltr"
                     placeholder="https://..."
@@ -611,44 +621,39 @@ export default function ProfilePage() {
                 </label>
                 <div className="profile__form-actions">
                   <button type="submit" className="profile__btn">
-                    ذخیره نشانی
+                    {t('profile.saveUrl')}
                   </button>
                   <button
                     type="button"
                     className="profile__btn profile__btn--ghost"
                     onClick={async () => {
                       if (applyUpdate(await updateUser(liveProfile.id, { avatar: '' }))) {
-                        setMessage('عکس پروفایل به پیش‌فرض برگشت.')
+                        setMessage(t('profile.saved'))
                         cancelEdit()
                       }
                     }}
                   >
-                    حذف عکس
+                    {t('profile.removeAvatar')}
                   </button>
                   <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                    انصراف
+                    {t('common.cancel')}
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <p className="profile__hint">
-                  با اشتراک پایه امکان آپلود و تغییر عکس پروفایل وجود ندارد. برای تغییر عکس، اشتراک را به
-                  نقره‌ای یا طلایی ارتقا دهید.
-                </p>
+                <p className="profile__hint">{t('profile.avatarBlocked')}</p>
                 <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                  بستن
+                  {t('common.close')}
                 </button>
               </>
             )}
           </form>
         ) : (
           <p className="profile__hint">
-            {liveProfile.avatar
-              ? 'عکس اختصاصی تنظیم شده است.'
-              : 'از عکس پیش‌فرض سامانه استفاده می‌شود.'}
+            {liveProfile.avatar ? t('profile.avatarSet') : t('profile.avatarDefault')}
             {!canChangeAvatar(liveProfile.subscription) && isOwn
-              ? ' (اشتراک پایه: تغییر عکس غیرفعال است)'
+              ? t('profile.avatarBasicBlocked')
               : ''}
           </p>
         )}
@@ -656,36 +661,36 @@ export default function ProfilePage() {
 
       <section className="profile__card">
         <div className="profile__card-head">
-          <h2>نوع اشتراک</h2>
+          <h2>{t('profile.subscription')}</h2>
           {isOwn && editing !== 'subscription' ? (
             <button
               type="button"
               className="profile__link-btn"
               onClick={() => startEdit('subscription')}
             >
-              ویرایش
+              {t('common.edit')}
             </button>
           ) : null}
         </div>
         {editing === 'subscription' ? (
           <form className="profile__form" onSubmit={saveEdit}>
             <label>
-              اشتراک
+              {t('profile.subscription')}
               <select
                 value={draft.subscription}
                 onChange={(e) => setDraft((d) => ({ ...d, subscription: e.target.value }))}
               >
-                <option value="basic">عادی (پایه)</option>
-                <option value="silver">نقره‌ای</option>
-                <option value="gold">طلایی</option>
+                <option value="basic">{subscriptionLabel('basic')}</option>
+                <option value="silver">{subscriptionLabel('silver')}</option>
+                <option value="gold">{subscriptionLabel('gold')}</option>
               </select>
             </label>
             <div className="profile__form-actions">
               <button type="submit" className="profile__btn">
-                ذخیره
+                {t('common.save')}
               </button>
               <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                انصراف
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -696,21 +701,21 @@ export default function ProfilePage() {
 
       <section className="profile__card">
         <div className="profile__card-head">
-          <h2>آمار استریم روزانه</h2>
+          <h2>{t('profile.dailyStreams')}</h2>
           {isOwn && editing !== 'dailyStreams' ? (
             <button
               type="button"
               className="profile__link-btn"
               onClick={() => startEdit('dailyStreams')}
             >
-              ویرایش
+              {t('common.edit')}
             </button>
           ) : null}
         </div>
         {editing === 'dailyStreams' ? (
           <form className="profile__form" onSubmit={saveEdit}>
             <label>
-              تعداد استریم امروز
+              {t('profile.dailyStreamsField')}
               <input
                 type="number"
                 min="0"
@@ -721,22 +726,22 @@ export default function ProfilePage() {
             </label>
             <div className="profile__form-actions">
               <button type="submit" className="profile__btn">
-                ذخیره
+                {t('common.save')}
               </button>
               <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                انصراف
+                {t('common.cancel')}
               </button>
             </div>
           </form>
         ) : (
-          <p className="profile__value">{liveProfile.dailyStreams ?? 0}</p>
+          <p className="profile__value">{formatNumber(liveProfile.dailyStreams ?? 0)}</p>
         )}
       </section>
 
       {isOwn ? (
         <section className="profile__card">
           <div className="profile__card-head">
-            <h2>نمایه‌های دیگر (برای تست دنبال کردن)</h2>
+            <h2>{t('profile.otherProfiles')}</h2>
           </div>
           <ul className="profile__people">
             {['u-listener', 'u-gold', 'u-silver', 'u-artist']
@@ -755,7 +760,7 @@ export default function ProfilePage() {
         </section>
       ) : (
         <p className="profile__back">
-          <Link to="/profile">بازگشت به نمایه من</Link>
+          <Link to="/profile">{t('profile.backToMine')}</Link>
         </p>
       )}
     </div>

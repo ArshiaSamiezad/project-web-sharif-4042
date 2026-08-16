@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
 import './PlaylistsPage.css'
 
 export default function PlaylistsPage() {
@@ -9,6 +10,7 @@ export default function PlaylistsPage() {
     getPlaylistLimit,
     createPlaylist,
   } = useAuth()
+  const { t, formatNumber } = useI18n()
   const navigate = useNavigate()
 
   const playlists = getOwnedPlaylists()
@@ -20,8 +22,11 @@ export default function PlaylistsPage() {
   const [createError, setCreateError] = useState('')
 
   const limitLabel = Number.isFinite(limit)
-    ? `${playlists.length.toLocaleString('fa-IR')} از ${limit.toLocaleString('fa-IR')}`
-    : `${playlists.length.toLocaleString('fa-IR')} • نامحدود`
+    ? t('playlists.quotaFinite', {
+        count: formatNumber(playlists.length),
+        limit: formatNumber(limit),
+      })
+    : t('playlists.quotaInfinite', { count: formatNumber(playlists.length) })
 
   function openCreate() {
     setCreateError('')
@@ -31,23 +36,24 @@ export default function PlaylistsPage() {
 
   function handleCreate(event) {
     event.preventDefault()
-    const result = createPlaylist(createTitle)
-    if (!result.ok) {
-      setCreateError(result.error)
-      return
-    }
-    setCreating(false)
-    setCreateTitle('')
-    setCreateError('')
-    navigate(`/playlist/${result.playlist.id}`)
+    createPlaylist(createTitle).then((result) => {
+      if (!result.ok) {
+        setCreateError(result.error)
+        return
+      }
+      setCreating(false)
+      setCreateTitle('')
+      setCreateError('')
+      navigate(`/playlist/${result.playlist.id}`)
+    })
   }
 
   return (
     <div className="playlists">
       <header className="playlists__header">
         <div>
-          <h1>پلی‌لیست‌ها</h1>
-          <p>لیست‌های پخش شما</p>
+          <h1>{t('playlists.title')}</h1>
+          <p>{t('playlists.subtitle')}</p>
         </div>
         <div className="playlists__header-actions">
           <span className="playlists__quota">{limitLabel}</span>
@@ -57,9 +63,9 @@ export default function PlaylistsPage() {
               className="playlists__btn playlists__btn--primary"
               onClick={openCreate}
               disabled={atLimit}
-              title={atLimit ? 'به سقف اشتراک رسیده‌اید' : undefined}
+              title={atLimit ? t('playlists.atLimit') : undefined}
             >
-              پلی‌لیست جدید
+              {t('playlists.new')}
             </button>
           ) : null}
         </div>
@@ -68,18 +74,18 @@ export default function PlaylistsPage() {
       {creating ? (
         <form className="playlists__create" onSubmit={handleCreate} noValidate>
           <label>
-            <span>نام پلی‌لیست</span>
+            <span>{t('playlists.nameLabel')}</span>
             <input
               value={createTitle}
               onChange={(event) => setCreateTitle(event.target.value)}
-              placeholder="مثلاً شب‌های بارانی"
+              placeholder={t('playlists.namePlaceholder')}
               autoFocus
             />
           </label>
           {createError ? <p className="playlists__error">{createError}</p> : null}
           <div className="playlists__create-actions">
             <button type="submit" className="playlists__btn playlists__btn--primary">
-              ایجاد
+              {t('common.create')}
             </button>
             <button
               type="button"
@@ -89,7 +95,7 @@ export default function PlaylistsPage() {
                 setCreateError('')
               }}
             >
-              انصراف
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -102,15 +108,15 @@ export default function PlaylistsPage() {
             <span />
             <span />
           </div>
-          <h2>هنوز پلی‌لیستی ندارید</h2>
-          <p>اولین لیست پخش خود را بسازید و آهنگ‌های محبوب‌تان را به آن اضافه کنید.</p>
+          <h2>{t('playlists.emptyTitle')}</h2>
+          <p>{t('playlists.emptyBody')}</p>
           <button
             type="button"
             className="playlists__btn playlists__btn--primary"
             onClick={openCreate}
             disabled={atLimit}
           >
-            ایجاد اولین پلی‌لیست
+            {t('playlists.createFirst')}
           </button>
         </div>
       ) : null}
@@ -125,7 +131,7 @@ export default function PlaylistsPage() {
                   type="button"
                   className="playlists__tile-cover"
                   onClick={() => navigate(`/playlist/${playlist.id}`)}
-                  aria-label={`باز کردن پلی‌لیست ${playlist.title}`}
+                  aria-label={t('common.openPlaylistAria', { title: playlist.title })}
                 >
                   <img src={playlist.cover} alt="" />
                 </button>
@@ -137,7 +143,7 @@ export default function PlaylistsPage() {
                   {playlist.title}
                 </button>
                 <p className="playlists__tile-meta">
-                  {trackCount.toLocaleString('fa-IR')} آهنگ
+                  {t('common.trackCount', { count: formatNumber(trackCount) })}
                 </p>
               </article>
             )

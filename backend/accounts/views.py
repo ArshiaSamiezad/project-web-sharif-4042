@@ -15,7 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import ArtistVerification, UserPreference
 from .permissions import IsSupportOrAdmin
 from .serializers import (ArtistRegistrationSerializer, ListenerRegistrationSerializer, PasswordResetConfirmSerializer,
-    PasswordResetRequestSerializer, PreferenceSerializer, UserSerializer, VerificationReviewSerializer, VerificationSerializer)
+    PasswordResetRequestSerializer, PreferenceSerializer, UserSerializer, VerificationReviewSerializer, VerificationSerializer, sync_catalog_user)
 
 User = get_user_model()
 
@@ -30,9 +30,13 @@ class ListenerRegisterView(generics.CreateAPIView):
 class ArtistRegisterView(ListenerRegisterView):
     serializer_class = ArtistRegistrationSerializer
 
-class MeView(generics.RetrieveUpdateAPIView):
+class MeView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     def get_object(self): return self.request.user
+    def perform_destroy(self, instance):
+        from apps.users.models import User as CatalogUser
+        CatalogUser.objects.filter(email__iexact=instance.email).delete()
+        instance.delete()
 
 class PreferenceView(generics.RetrieveUpdateAPIView):
     serializer_class = PreferenceSerializer
@@ -86,4 +90,5 @@ class VerificationReviewView(APIView):
         if item.status == ArtistVerification.Status.APPROVED:
             item.applicant.role = User.Role.ARTIST; item.applicant.artist_name = item.artist_name
             item.applicant.save(update_fields=["role", "artist_name"])
+        sync_catalog_user(item.applicant, item.status)
         return Response(VerificationSerializer(item).data)

@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
+from apps.users.models import User as CatalogUser
 from .models import ArtistVerification
 
 User = get_user_model()
@@ -10,6 +11,7 @@ class CoreAuthTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         user = User.objects.get(email="new@example.com")
         self.assertTrue(user.check_password("StrongPass!42")); self.assertEqual(user.role, User.Role.LISTENER)
+        self.assertTrue(CatalogUser.objects.filter(email="new@example.com").exists())
 
     def test_login_returns_tokens_and_me(self):
         User.objects.create_user(email="user@example.com", password="StrongPass!42", display_name="User")
@@ -40,3 +42,11 @@ class CoreAuthTests(APITestCase):
         self.client.force_authenticate(first); self.client.patch("/api/auth/preferences/", {"theme":"dark","language":"en","autoplay":False,"explicitContent":True,"emailNotifications":False}, format="json")
         self.client.force_authenticate(second); self.assertEqual(self.client.get("/api/auth/preferences/").data["theme"], "system")
         self.client.force_authenticate(first); self.assertEqual(self.client.get("/api/auth/preferences/").data["theme"], "dark")
+
+    def test_deleting_account_removes_catalog_profile(self):
+        user = User.objects.create_user(email="delete@example.com", password="StrongPass!42", display_name="Delete")
+        CatalogUser.objects.create(email=user.email, display_name="Delete", username=user.username)
+        self.client.force_authenticate(user)
+        self.assertEqual(self.client.delete("/api/auth/me/").status_code, 204)
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+        self.assertFalse(CatalogUser.objects.filter(email=user.email).exists())

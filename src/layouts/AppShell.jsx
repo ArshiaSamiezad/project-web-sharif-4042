@@ -1,16 +1,25 @@
 import { useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
 import { getItem, setItem } from '../lib/storage'
 import PageTransition from '../components/PageTransition'
+import MusicPlayer from '../components/player/MusicPlayer'
 import './AppShell.css'
 
+
 const NAV = [
-  { to: '/home', label: 'خانه', shortLabel: 'خانه', end: true, icon: 'home' },
-  { to: '/playlists', label: 'پلی‌لیست‌ها', shortLabel: 'پلی‌لیست', icon: 'playlists' },
-  { to: '/catalog', label: 'آلبوم‌ها و تک‌آهنگ‌ها', shortLabel: 'آرشیو', icon: 'catalog' },
-  { to: '/profile', label: 'نمایه کاربری', shortLabel: 'نمایه', icon: 'profile' },
-  { to: '/settings', label: 'تنظیمات برنامه', shortLabel: 'تنظیمات', icon: 'settings' },
+  { to: '/home', labelKey: 'nav.home', shortKey: 'nav.homeShort', end: true, icon: 'home' },
+  { to: '/playlists', labelKey: 'nav.playlists', shortKey: 'nav.playlistsShort', icon: 'playlists' },
+  { to: '/catalog', labelKey: 'nav.catalog', shortKey: 'nav.catalogShort', icon: 'catalog' },
+  { to: '/profile', labelKey: 'nav.profile', shortKey: 'nav.profileShort', icon: 'profile' },
+  {
+    to: '/notifications',
+    labelKey: 'nav.notifications',
+    shortKey: 'nav.notificationsShort',
+    icon: 'notifications',
+  },
+  { to: '/settings', labelKey: 'nav.settings', shortKey: 'nav.settingsShort', icon: 'settings' },
 ]
 
 function NavIcon({ name }) {
@@ -49,11 +58,34 @@ function NavIcon({ name }) {
           <path d="M12 4v3M12 17v3M4 12h3M17 12h3" />
         </svg>
       )
+    case 'works':
+      return (
+        <svg {...props}>
+          <rect x="4" y="5" width="16" height="14" rx="1.5" />
+          <path d="M8 9h8M8 12h8M8 15h5" />
+        </svg>
+      )
+    case 'staff':
+      return (
+        <svg {...props}>
+          <path d="M4 19V7a1 1 0 0 1 1-1h6l2 2h6a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />
+          <path d="M9 14h6M9 11h3" />
+        </svg>
+      )
     case 'profile':
       return (
         <svg {...props}>
           <circle cx="12" cy="8" r="3.2" />
           <path d="M5 19.5c1.6-3.2 4-4.8 7-4.8s5.4 1.6 7 4.8" />
+        </svg>
+      )
+    case 'notifications':
+      return (
+        <svg {...props}>
+          <path d="M6.5 17.5h11" />
+          <path d="M8 17.5V10a4 4 0 0 1 8 0v7.5" />
+          <path d="M10.2 17.5a1.8 1.8 0 0 0 3.6 0" />
+          <path d="M12 4.2V3.5" />
         </svg>
       )
     case 'settings':
@@ -86,12 +118,31 @@ function NavIcon({ name }) {
       return null
   }
 }
-
 export default function AppShell() {
-  const { currentUser, logout, defaultAvatar } = useAuth()
+  const {
+    currentUser,
+    logout,
+    defaultAvatar,
+    getUnreadNotificationCount,
+    isVerifiedArtist,
+    isStaff,
+  } = useAuth()
+  const { t, subscriptionLabel, formatNumber } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(() => Boolean(getItem('sidebarCollapsed', false)))
+  const unreadCount = getUnreadNotificationCount()
+
+  const navItems = [
+    ...NAV.slice(0, 3),
+    ...(isVerifiedArtist(currentUser)
+      ? [{ to: '/artist/works', labelKey: 'nav.works', shortKey: 'nav.worksShort', icon: 'works' }]
+      : []),
+    ...(isStaff(currentUser)
+      ? [{ to: '/staff/inbox', labelKey: 'nav.staff', shortKey: 'nav.staffShort', icon: 'staff' }]
+      : []),
+    ...NAV.slice(3),
+  ]
 
   function handleLogout() {
     logout()
@@ -109,15 +160,24 @@ export default function AppShell() {
   function linkClass(item, isActive) {
     const profileActive =
       item.to === '/profile' && location.pathname.startsWith('/profile')
-    return isActive || profileActive ? 'shell__link is-active' : 'shell__link'
+    const worksActive =
+      item.to === '/artist/works' && location.pathname.startsWith('/artist/works')
+    const staffActive =
+      item.to === '/staff/inbox' && location.pathname.startsWith('/staff')
+    return isActive || profileActive || worksActive || staffActive
+      ? 'shell__link is-active'
+      : 'shell__link'
   }
+
+  const expandLabel = collapsed ? t('nav.expand') : t('nav.collapse')
+  const logoutLabel = t('nav.logout')
 
   return (
     <div className={`shell${collapsed ? ' shell--collapsed' : ''}`}>
-      <aside className="shell__sidebar" aria-label="ناوبری">
+      <aside className="shell__sidebar" aria-label={t('nav.sidebar')}>
         <div className="shell__sidebar-head">
-          <p className="shell__brand" title="Sepatify">
-            <span className="shell__brand-full">Sepatify</span>
+          <p className="shell__brand" title={t('common.brand')}>
+            <span className="shell__brand-full">{t('common.brand')}</span>
             <span className="shell__brand-short" aria-hidden="true">
               S
             </span>
@@ -127,39 +187,51 @@ export default function AppShell() {
             className="shell__collapse"
             onClick={toggleCollapsed}
             aria-expanded={!collapsed}
-            aria-label={collapsed ? 'باز کردن منو' : 'بستن منو'}
-            title={collapsed ? 'باز کردن منو' : 'بستن منو'}
+            aria-label={expandLabel}
+            title={expandLabel}
           >
             <NavIcon name={collapsed ? 'expand' : 'collapse'} />
           </button>
         </div>
 
-        <nav className="shell__nav" aria-label="منوی اصلی">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => linkClass(item, isActive)}
-              title={item.label}
-            >
-              <NavIcon name={item.icon} />
-              <span className="shell__link-label">
-                <span className="shell__link-label-full">{item.label}</span>
-                <span className="shell__link-label-short">{item.shortLabel}</span>
-              </span>
-            </NavLink>
-          ))}
+        <nav className="shell__nav" aria-label={t('nav.mainMenu')}>
+          {navItems.map((item) => {
+            const label = t(item.labelKey)
+            const shortLabel = t(item.shortKey)
+            const showBadge = item.to === '/notifications' && unreadCount > 0
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => linkClass(item, isActive)}
+                title={label}
+              >
+                <span className="shell__icon-wrap">
+                  <NavIcon name={item.icon} />
+                  {showBadge ? (
+                    <span className="shell__nav-badge" aria-label={t('notifications.unreadBadge', { count: formatNumber(unreadCount) })}>
+                      {unreadCount > 9 ? '9+' : formatNumber(unreadCount)}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="shell__link-label">
+                  <span className="shell__link-label-full">{label}</span>
+                  <span className="shell__link-label-short">{shortLabel}</span>
+                </span>
+              </NavLink>
+            )
+          })}
         </nav>
 
         <button
           type="button"
           className="shell__logout shell__logout--sidebar"
           onClick={handleLogout}
-          title="خروج"
+          title={logoutLabel}
         >
           <NavIcon name="logout" />
-          <span className="shell__link-label">خروج</span>
+          <span className="shell__link-label">{logoutLabel}</span>
         </button>
       </aside>
 
@@ -175,9 +247,11 @@ export default function AppShell() {
             <div>
               <p className="shell__name">{currentUser.displayName}</p>
               {currentUser.subscription === 'gold' ? (
-                <span className="shell__badge">طلایی</span>
+                <span className="shell__badge">{subscriptionLabel('gold')}</span>
               ) : currentUser.subscription === 'silver' ? (
-                <span className="shell__badge shell__badge--silver">نقره‌ای</span>
+                <span className="shell__badge shell__badge--silver">
+                  {subscriptionLabel('silver')}
+                </span>
               ) : null}
             </div>
           </div>
@@ -185,16 +259,18 @@ export default function AppShell() {
             type="button"
             className="shell__logout shell__logout--top"
             onClick={handleLogout}
-            title="خروج"
+            title={logoutLabel}
           >
             <NavIcon name="logout" />
-            <span className="shell__link-label">خروج</span>
+            <span className="shell__link-label">{logoutLabel}</span>
           </button>
         </header>
         <div className="shell__page">
           <PageTransition />
         </div>
       </div>
+
+      <MusicPlayer />
     </div>
   )
 }

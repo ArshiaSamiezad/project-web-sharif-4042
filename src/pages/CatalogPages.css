@@ -546,6 +546,14 @@
   color: var(--color-illuminating);
 }
 
+.album-track__artist-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.45rem;
+  min-width: 0;
+}
+
 .album-track__artist {
   color: var(--color-text-muted);
   font-size: 0.78rem;
@@ -560,6 +568,11 @@
 .album-track__artist:hover {
   color: var(--color-text);
   text-decoration: underline;
+}
+
+.album-track__feat {
+  color: var(--color-ultimate-grey);
+  font-size: 0.72rem;
 }
 
 .album-track__badge {

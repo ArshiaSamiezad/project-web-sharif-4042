@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePlaying } from '../context/PlayingContext'
+import { useI18n } from '../i18n/I18nProvider'
 import PlaylistMenu from '../components/PlaylistMenu'
 import PlayingBars from '../components/PlayingBars'
 import './CatalogPages.css'
@@ -15,6 +16,7 @@ function matchesQuery(text, query) {
 export default function CatalogPage() {
   const { currentUser, getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
+  const { t, formatNumber, language } = useI18n()
   const navigate = useNavigate()
   const catalog = getCatalog()
 
@@ -71,14 +73,14 @@ export default function CatalogPage() {
     <div className="catalog">
       <header className="catalog__header">
         <div>
-          <h1>آلبوم‌ها و تک‌آهنگ‌ها</h1>
-          <p>جستجو و کشف موسیقی در آرشیو سپتیفای</p>
+          <h1>{t('catalog.title')}</h1>
+          <p>{t('catalog.subtitle')}</p>
         </div>
       </header>
 
       <div className="catalog__controls">
         <label className="catalog__search">
-          <span className="visually-hidden">جستجو</span>
+          <span className="visually-hidden">{t('common.search')}</span>
           <span className="catalog__search-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="11" cy="11" r="6.5" />
@@ -89,13 +91,13 @@ export default function CatalogPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="جستجو بر اساس نام اثر یا هنرمند…"
+            placeholder={t('catalog.searchPlaceholder')}
             autoComplete="off"
           />
         </label>
 
-        <div className="catalog__sort" role="group" aria-label="مرتب‌سازی">
-          <span className="catalog__sort-label">مرتب‌سازی</span>
+        <div className="catalog__sort" role="group" aria-label={t('catalog.sort')}>
+          <span className="catalog__sort-label">{t('catalog.sort')}</span>
           <div className="catalog__sort-track">
             <button
               type="button"
@@ -108,7 +110,7 @@ export default function CatalogPage() {
                   <path d="M5 18V10M10 18V6M15 18v-5M20 18V8" strokeLinecap="round" />
                 </svg>
               </span>
-              تعداد شنونده
+              {t('catalog.sortListeners')}
             </button>
             <button
               type="button"
@@ -122,14 +124,14 @@ export default function CatalogPage() {
                   <path d="M8 3v4M16 3v4M4 10h16" strokeLinecap="round" />
                 </svg>
               </span>
-              تاریخ انتشار
+              {t('catalog.sortDate')}
             </button>
           </div>
         </div>
       </div>
 
       {items.length === 0 ? (
-        <p className="catalog__empty">موردی با این جستجو پیدا نشد.</p>
+        <p className="catalog__empty">{t('catalog.empty')}</p>
       ) : (
         <div className="catalog__grid">
           {items.map((item) => {
@@ -141,7 +143,7 @@ export default function CatalogPage() {
                       type="button"
                       className="catalog-card__cover-btn"
                       onClick={() => navigate(`/album/${item.id}`)}
-                      aria-label={`باز کردن آلبوم ${item.title}`}
+                      aria-label={t('common.openAlbumAria', { title: item.title })}
                     >
                       <img src={item.cover} alt="" />
                     </button>
@@ -158,7 +160,7 @@ export default function CatalogPage() {
                       {item.title}
                     </button>
                     <p className="catalog-card__meta-row">
-                      <span className="catalog-card__kind">آلبوم</span>
+                      <span className="catalog-card__kind">{t('common.album')}</span>
                       <span className="catalog-card__kind-sep" aria-hidden="true">
                         •
                       </span>
@@ -170,8 +172,13 @@ export default function CatalogPage() {
                         {item.artistName}
                       </Link>
                     </p>
+                    {item.genre ? (
+                      <p className="catalog-card__album">{item.genre}</p>
+                    ) : null}
                     <p className="catalog-card__stat">
-                      {(item.listeners || 0).toLocaleString('fa-IR')} شنونده
+                      {t('common.listenerCount', {
+                        count: formatNumber(item.listeners || 0),
+                      })}
                     </p>
                   </div>
                 </article>
@@ -193,13 +200,17 @@ export default function CatalogPage() {
                     type="button"
                     className="catalog-card__cover-btn"
                     onClick={() => playTrack(item.id)}
-                    aria-label={isPlaying ? `توقف ${item.title}` : `پخش ${item.title}`}
+                    aria-label={
+                      isPlaying
+                        ? t('common.pauseAria', { title: item.title })
+                        : t('common.playAria', { title: item.title })
+                    }
                   >
                     <img src={item.cover} alt="" />
                     {isPlaying ? (
                       <span className="catalog-card__playing">
                         <PlayingBars />
-                        <span>در حال پخش</span>
+                        <span>{t('common.nowPlaying')}</span>
                       </span>
                     ) : (
                       <span className="catalog-card__play-hint" aria-hidden="true">
@@ -220,7 +231,7 @@ export default function CatalogPage() {
                     {item.title}
                   </button>
                   <p className="catalog-card__meta-row">
-                    <span className="catalog-card__kind">تک‌آهنگ</span>
+                    <span className="catalog-card__kind">{t('common.single')}</span>
                     <span className="catalog-card__kind-sep" aria-hidden="true">
                       •
                     </span>
@@ -228,13 +239,25 @@ export default function CatalogPage() {
                       {item.artistName}
                     </Link>
                   </p>
+                  {item.genre ? (
+                    <p className="catalog-card__album">{item.genre}</p>
+                  ) : null}
+                  {Array.isArray(item.collaborators) && item.collaborators.length > 0 ? (
+                    <p className="catalog-card__album">
+                      {t('common.featuring', {
+                        names: item.collaborators.join(language === 'en' ? ', ' : '، '),
+                      })}
+                    </p>
+                  ) : null}
                   {album ? (
                     <Link to={`/album/${album.id}`} className="catalog-card__album">
                       {album.title}
                     </Link>
                   ) : null}
                   <p className="catalog-card__stat">
-                    {(item.listeners || item.plays || 0).toLocaleString('fa-IR')} شنونده
+                    {t('common.listenerCount', {
+                      count: formatNumber(item.listeners || item.plays || 0),
+                    })}
                   </p>
                 </div>
               </article>

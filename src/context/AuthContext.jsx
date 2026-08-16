@@ -1,6 +1,15 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as storage from '../lib/storage'
-import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS } from '../data/seed'
+import { catalogApi, ApiError } from '../lib/api'
+import {
+  buildUserIdMaps,
+  mapAlbumFromApi,
+  mapPlaylistFromApi,
+  mapTrackFromApi,
+  toApiUserId,
+} from '../lib/catalogMap'
+import { idEq, yearToReleasedAt } from '../lib/ids'
+import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS, DEFAULT_SUBSCRIPTION_PRICES } from '../data/seed'
 import {
   validateArtistSignup,
   validateListenerSignup,
@@ -8,22 +17,103 @@ import {
   validatePasswordReset,
 } from '../lib/validation'
 import * as backend from '../lib/api'
+import { formatNumber, t } from '../i18n/translations'
 
 const AuthContext = createContext(null)
+
+export const DEFAULT_USER_SETTINGS = {
+  notifications: 'all',
+  volume: 80,
+  language: 'fa',
+}
+
+export function getUserSettings(user) {
+  return {
+    ...DEFAULT_USER_SETTINGS,
+    ...(user?.settings || {}),
+  }
+}
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null)
   const [ready, setReady] = useState(false)
   const [catalogVersion, setCatalogVersion] = useState(0)
+  const [albums, setAlbums] = useState([])
+  const [tracks, setTracks] = useState([])
+  const [playlists, setPlaylists] = useState([])
+  const [apiUsers, setApiUsers] = useState([])
 
   function bumpCatalog() {
     setCatalogVersion((n) => n + 1)
   }
 
+  function getUserMaps(authUser = currentUser) {
+    const localUsers = storage.getItem('users', [])
+    const usersForMapping = authUser ? [...localUsers, authUser] : localUsers
+    return buildUserIdMaps(usersForMapping, apiUsers)
+  }
+
+  async function refreshCatalog(authUser = currentUser) {
+    const [apiUserList, albumList, trackList, playlistList] = await Promise.all([
+      catalogApi.listUsers(),
+      catalogApi.listAlbums(),
+      catalogApi.listTracks(),
+      catalogApi.listPlaylists(),
+    ])
+    const users = Array.isArray(apiUserList) ? apiUserList : []
+    const localUsers = storage.getItem('users', [])
+    const usersForMapping = authUser ? [...localUsers, authUser] : localUsers
+    const maps = buildUserIdMaps(usersForMapping, users)
+    setApiUsers(users)
+    setAlbums((albumList || []).map((item) => mapAlbumFromApi(item, maps)))
+    setTracks((trackList || []).map((item) => mapTrackFromApi(item, maps)))
+    setPlaylists((playlistList || []).map((item) => mapPlaylistFromApi(item, maps)))
+    bumpCatalog()
+  }
+
+  function apiFailure(error, fallback) {
+    if (error instanceof ApiError) {
+      return { ok: false, error: error.message || fallback }
+    }
+    return { ok: false, error: fallback }
+  }
+
   useEffect(() => {
-    ensureSeedData(storage)
-    if (!backend.hasSession()) { setReady(true); return }
-    backend.api('/auth/me/').then(setSession).catch(() => backend.clearSession()).finally(() => setReady(true))
+    let cancelled = false
+
+    async function boot() {
+      ensureSeedData(storage)
+      let sessionUser = null
+
+      if (backend.hasSession()) {
+        try {
+          const [user, preferences] = await Promise.all([
+            backend.api('/auth/me/'),
+            backend.api('/auth/preferences/'),
+          ])
+          sessionUser = setSession(user, preferences)
+        } catch {
+          backend.clearSession()
+          setSession(null)
+        }
+      }
+
+      try {
+        await refreshCatalog(sessionUser)
+      } catch {
+        if (!cancelled) {
+          setAlbums([])
+          setTracks([])
+          setPlaylists([])
+        }
+      }
+      if (!cancelled) setReady(true)
+    }
+
+    boot()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   function getUsers() {
@@ -34,8 +124,33 @@ export function AuthProvider({ children }) {
     storage.setItem('users', users)
   }
 
-  function setSession(user) {
-    setCurrentUser(user ? { followers: [], following: [], dailyStreams: 0, recentPlaylistIds: [], ...user } : null)
+  function mergeSessionUser(user, preferences) {
+    if (!user) return null
+    const localUser = getUsers().find(
+      (item) => item.email?.toLowerCase() === user.email?.toLowerCase(),
+    )
+    return {
+      followers: [],
+      following: [],
+      dailyStreams: 0,
+      recentPlaylistIds: [],
+      ...localUser,
+      ...user,
+      id: localUser?.id ?? user.id,
+      backendId: user.backendId ?? user.id,
+      artistName: user.artistName ?? user.artist_name ?? localUser?.artistName ?? '',
+      settings: {
+        ...DEFAULT_USER_SETTINGS,
+        ...(localUser?.settings || {}),
+        ...(preferences || {}),
+      },
+    }
+  }
+
+  function setSession(user, preferences) {
+    const merged = mergeSessionUser(user, preferences)
+    setCurrentUser(merged)
+    return merged
   }
 
   async function login(email, password) {
@@ -44,12 +159,31 @@ export function AuthProvider({ children }) {
       return { ok: false, error: validationError }
     }
 
-    try { const user = await backend.login(email.trim(), password); setSession(user); return { ok: true, user } }
-    catch (error) { return { ok: false, error: error.message } }
+    try {
+      const user = await backend.login(email.trim(), password)
+      if (user.status === 'pending') {
+        backend.clearSession()
+        return { ok: false, error: t('errors.artistPending') }
+      }
+      if (user.status === 'rejected') {
+        backend.clearSession()
+        return { ok: false, error: t('errors.artistRejected') }
+      }
+      const preferences = await backend.api('/auth/preferences/')
+      const sessionUser = setSession(user, preferences)
+      await refreshCatalog(sessionUser)
+      return { ok: true, user: sessionUser }
+    } catch (error) {
+      return { ok: false, error: error.message || t('errors.invalidCredentials') }
+    }
   }
 
   async function logout() {
-    await backend.logout(); setSession(null)
+    try {
+      await backend.logout()
+    } finally {
+      setSession(null)
+    }
   }
 
   async function registerListener(data) {
@@ -58,8 +192,15 @@ export function AuthProvider({ children }) {
       return { ok: false, error: validationError }
     }
 
-    try { const user = await backend.api('/auth/register/listener/', { method: 'POST', body: data }); return { ok: true, user } }
-    catch (error) { return { ok: false, error: error.message } }
+    try {
+      const user = await backend.api('/auth/register/listener/', {
+        method: 'POST',
+        body: data,
+      })
+      return { ok: true, user }
+    } catch (error) {
+      return { ok: false, error: error.message || t('errors.emailTaken') }
+    }
   }
 
   async function registerArtist(data) {
@@ -72,7 +213,9 @@ export function AuthProvider({ children }) {
       const payload = { ...data, samples: data.samples.map((sample) => sample.name || String(sample)) }
       const user = await backend.api('/auth/register/artist/', { method: 'POST', body: payload })
       return { ok: true, user, pending: true }
-    } catch (error) { return { ok: false, error: error.message } }
+    } catch (error) {
+      return { ok: false, error: error.message || t('errors.emailTaken') }
+    }
   }
 
   async function requestPasswordReset(email) {
@@ -81,13 +224,17 @@ export function AuthProvider({ children }) {
       return { ok: false, error: validationError }
     }
 
-    try { await backend.api('/auth/password-reset/', { method: 'POST', body: { email } }); return { ok: true, message: 'اگر این ایمیل در سامانه ثبت شده باشد، لینک بازیابی رمز ارسال می‌شود.' } }
-    catch (error) { return { ok: false, error: error.message } }
+    try {
+      await backend.api('/auth/password-reset/', { method: 'POST', body: { email } })
+      return { ok: true, message: t('errors.resetSent') }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
   }
 
   function getUserById(userId) {
-    if (currentUser?.id === userId) return currentUser
-    return getUsers().find((u) => u.id === userId) || null
+    if (idEq(currentUser?.id, userId)) return currentUser
+    return getUsers().find((u) => idEq(u.id, userId)) || null
   }
 
   function getUserByUsername(username) {
@@ -106,37 +253,169 @@ export function AuthProvider({ children }) {
   }
 
   async function updateUser(userId, patch) {
-    if (userId === currentUser?.id) {
-      try { const updated = await backend.api('/auth/me/', { method: 'PATCH', body: patch }); setCurrentUser(updated); return { ok: true, user: updated } }
-      catch (error) { return { ok: false, error: error.message } }
+    if (idEq(userId, currentUser?.id)) {
+      const { settings, ...serverPatch } = patch
+      try {
+        const serverUser = Object.keys(serverPatch).length
+          ? await backend.api('/auth/me/', { method: 'PATCH', body: serverPatch })
+          : currentUser
+        const updated = mergeSessionUser(
+          serverUser,
+          settings ? { ...getUserSettings(currentUser), ...settings } : currentUser.settings,
+        )
+        const nextUsers = getUsers().map((user) =>
+          idEq(user.id, currentUser.id) ||
+          user.email?.toLowerCase() === currentUser.email?.toLowerCase()
+            ? { ...user, ...serverPatch, ...(settings ? { settings: updated.settings } : {}) }
+            : user,
+        )
+        persistUsers(nextUsers)
+        setCurrentUser(updated)
+        return { ok: true, user: updated }
+      } catch (error) {
+        return { ok: false, error: error.message }
+      }
     }
     const users = getUsers()
 
     if (patch.username !== undefined) {
       const nextName = String(patch.username).trim()
       if (isUsernameTaken(nextName, userId)) {
-        return { ok: false, error: 'این نام کاربری قبلاً استفاده شده است.' }
+        return { ok: false, error: t('errors.usernameTaken') }
       }
       patch = { ...patch, username: nextName }
+    }
+
+    if (patch.settings !== undefined) {
+      const existing = users.find((u) => u.id === userId)
+      patch = {
+        ...patch,
+        settings: {
+          ...DEFAULT_USER_SETTINGS,
+          ...(existing?.settings || {}),
+          ...patch.settings,
+        },
+      }
     }
 
     const next = users.map((u) => (u.id === userId ? { ...u, ...patch } : u))
     persistUsers(next)
     const updated = next.find((u) => u.id === userId) || null
-    if (currentUser?.id === userId) setCurrentUser(updated)
+    if (currentUser?.id === userId) {
+      setCurrentUser(updated)
+    }
     return { ok: true, user: updated }
+  }
+
+  async function updateSettings(partial) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.settingsLoginRequired') }
+    }
+
+    const nextSettings = { ...getUserSettings(currentUser), ...partial }
+    const preferenceKeys = [
+      'theme',
+      'language',
+      'autoplay',
+      'explicitContent',
+      'emailNotifications',
+    ]
+    const preferencePatch = Object.fromEntries(
+      preferenceKeys
+        .filter((key) => Object.prototype.hasOwnProperty.call(partial, key))
+        .map((key) => [key, partial[key]]),
+    )
+
+    try {
+      const savedPreferences = Object.keys(preferencePatch).length
+        ? await backend.api('/auth/preferences/', {
+            method: 'PATCH',
+            body: preferencePatch,
+          })
+        : {}
+      const settings = { ...nextSettings, ...savedPreferences }
+      const nextUsers = getUsers().map((user) =>
+        idEq(user.id, currentUser.id) ||
+        user.email?.toLowerCase() === currentUser.email?.toLowerCase()
+          ? { ...user, settings }
+          : user,
+      )
+      persistUsers(nextUsers)
+      setCurrentUser((user) => ({ ...user, settings }))
+      return { ok: true, settings }
+    } catch (error) {
+      return { ok: false, error: error.message || t('settings.saveFailed') }
+    }
+  }
+
+  async function deleteAccount(userId = currentUser?.id) {
+    if (!userId) {
+      return { ok: false, error: t('errors.accountNotFound') }
+    }
+
+    const users = getUsers()
+    const isCurrentUser = idEq(currentUser?.id, userId)
+    const localUser = users.find(
+      (user) =>
+        idEq(user.id, userId) ||
+        (isCurrentUser && user.email?.toLowerCase() === currentUser.email?.toLowerCase()),
+    )
+    if (!localUser && !isCurrentUser) {
+      return { ok: false, error: t('errors.accountNotFound') }
+    }
+
+    if (isCurrentUser) {
+      try {
+        await backend.api('/auth/me/', { method: 'DELETE' })
+      } catch (error) {
+        return { ok: false, error: error.message || t('settings.deleteFailed') }
+      }
+    }
+
+    const localUserId = localUser?.id ?? userId
+
+    const nextUsers = users
+      .filter((u) => !idEq(u.id, localUserId))
+      .map((u) => ({
+        ...u,
+        followers: (u.followers || []).filter((id) => !idEq(id, localUserId)),
+        following: (u.following || []).filter((id) => !idEq(id, localUserId)),
+      }))
+    persistUsers(nextUsers)
+
+    try {
+      if (!isCurrentUser) {
+        const owned = playlists.filter((p) => idEq(p.ownerId, localUserId))
+        await Promise.all(owned.map((p) => catalogApi.deletePlaylist(p.id)))
+      }
+      await refreshCatalog()
+    } catch {
+      /* Refresh and legacy catalog cleanup are best-effort. */
+    }
+
+    if (isCurrentUser) {
+      backend.clearSession()
+      setSession(null)
+    }
+
+    const notifications = storage
+      .getItem('notifications', [])
+      .filter((n) => !idEq(n.userId, localUserId))
+    storage.setItem('notifications', notifications)
+    bumpCatalog()
+    return { ok: true }
   }
 
   function toggleFollow(targetId) {
     if (!currentUser || currentUser.id === targetId) {
-      return { ok: false, error: 'امکان دنبال کردن این کاربر وجود ندارد.' }
+      return { ok: false, error: t('errors.cannotFollow') }
     }
 
     const users = getUsers()
     const me = users.find((u) => u.id === currentUser.id)
     const target = users.find((u) => u.id === targetId)
     if (!me || !target) {
-      return { ok: false, error: 'کاربر پیدا نشد.' }
+      return { ok: false, error: t('errors.userNotFound') }
     }
 
     const isFollowing = me.following.includes(targetId)
@@ -161,18 +440,17 @@ export function AuthProvider({ children }) {
     void catalogVersion
     return {
       users: getUsers(),
-      playlists: storage.getItem('playlists', []),
-      albums: storage.getItem('albums', []),
-      tracks: storage.getItem('tracks', []),
+      playlists,
+      albums,
+      tracks,
     }
   }
 
   function getOwnedPlaylists(userId = currentUser?.id) {
     void catalogVersion
     if (!userId) return []
-    return storage
-      .getItem('playlists', [])
-      .filter((p) => p.ownerId === userId)
+    return playlists
+      .filter((p) => idEq(p.ownerId, userId))
       .map((p) => ({ ...p, trackIds: p.trackIds || [] }))
   }
 
@@ -181,14 +459,14 @@ export function AuthProvider({ children }) {
     return PLAYLIST_LIMITS[user.subscription] ?? PLAYLIST_LIMITS.basic
   }
 
-  function createPlaylist(title) {
+  async function createPlaylist(title) {
     if (!currentUser) {
-      return { ok: false, error: 'برای ساخت پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginCreate') }
     }
 
     const name = String(title ?? '').trim()
     if (!name) {
-      return { ok: false, error: 'نام پلی‌لیست را وارد کنید.' }
+      return { ok: false, error: t('errors.playlistNameRequired') }
     }
 
     const owned = getOwnedPlaylists(currentUser.id)
@@ -196,136 +474,857 @@ export function AuthProvider({ children }) {
     if (Number.isFinite(limit) && owned.length >= limit) {
       return {
         ok: false,
-        error: `سقف اشتراک شما ${limit.toLocaleString('fa-IR')} پلی‌لیست است.`,
+        error: t('errors.playlistLimit', { limit: formatNumber(limit) }),
       }
     }
 
-    const id = `pl-${Date.now()}`
-    const playlist = {
-      id,
-      title: name,
-      ownerId: currentUser.id,
-      cover: `https://picsum.photos/seed/sepatify-${id}/400/400`,
-      trackIds: [],
+    try {
+      const maps = getUserMaps()
+      const created = await catalogApi.createPlaylist({
+        title: name,
+        ownerId: toApiUserId(currentUser.id, maps),
+      })
+      await refreshCatalog()
+      return { ok: true, playlist: mapPlaylistFromApi(created, maps) }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistLoginCreate'))
     }
-
-    const playlists = storage.getItem('playlists', [])
-    storage.setItem('playlists', [playlist, ...playlists])
-    bumpCatalog()
-    return { ok: true, playlist }
   }
 
-  function renamePlaylist(playlistId, title) {
+  async function renamePlaylist(playlistId, title) {
     if (!currentUser) {
-      return { ok: false, error: 'برای ویرایش پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginEdit') }
     }
 
     const name = String(title ?? '').trim()
     if (!name) {
-      return { ok: false, error: 'نام پلی‌لیست را وارد کنید.' }
+      return { ok: false, error: t('errors.playlistNameRequired') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist || playlist.ownerId !== currentUser.id) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist || !idEq(playlist.ownerId, currentUser.id)) {
+      return { ok: false, error: t('errors.playlistNotFound') }
     }
 
-    const next = playlists.map((p) =>
-      p.id === playlistId ? { ...p, title: name } : p,
-    )
-    storage.setItem('playlists', next)
-    bumpCatalog()
-    return { ok: true, playlist: next.find((p) => p.id === playlistId) }
+    try {
+      const updated = await catalogApi.updatePlaylist(playlistId, { title: name })
+      await refreshCatalog()
+      return { ok: true, playlist: mapPlaylistFromApi(updated, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
+    }
   }
 
-  function deletePlaylist(playlistId) {
+  async function deletePlaylist(playlistId) {
     if (!currentUser) {
-      return { ok: false, error: 'برای حذف پلی‌لیست وارد شوید.' }
+      return { ok: false, error: t('errors.playlistLoginDelete') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist || playlist.ownerId !== currentUser.id) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist || !idEq(playlist.ownerId, currentUser.id)) {
+      return { ok: false, error: t('errors.playlistNotFound') }
     }
 
-    storage.setItem(
-      'playlists',
-      playlists.filter((p) => p.id !== playlistId),
+    try {
+      await catalogApi.deletePlaylist(playlistId)
+      await refreshCatalog()
+      return { ok: true }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
+    }
+  }
+
+  async function toggleTrackInPlaylist(playlistId, trackId) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.playlistLoginManage') }
+    }
+
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist) {
+      return { ok: false, error: t('errors.playlistNotFound') }
+    }
+    if (!idEq(playlist.ownerId, currentUser.id)) {
+      return { ok: false, error: t('errors.playlistOwnedOnly') }
+    }
+
+    const trackIds = playlist.trackIds || []
+    const hasTrack = trackIds.some((id) => idEq(id, trackId))
+
+    try {
+      const updated = hasTrack
+        ? await catalogApi.removeTrackFromPlaylist(playlistId, trackId)
+        : await catalogApi.addTrackToPlaylist(playlistId, trackId)
+      await refreshCatalog()
+      return {
+        ok: true,
+        added: !hasTrack,
+        playlist: mapPlaylistFromApi(updated, getUserMaps()),
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
+    }
+  }
+
+  async function toggleAlbumInPlaylist(playlistId, albumId) {
+    const albumTrackIds = tracks.filter((tr) => idEq(tr.albumId, albumId)).map((tr) => tr.id)
+
+    if (albumTrackIds.length === 0) {
+      return { ok: false, error: t('errors.albumHasNoTracks') }
+    }
+
+    const playlist = playlists.find((p) => idEq(p.id, playlistId))
+    if (!playlist || !idEq(playlist.ownerId, currentUser?.id)) {
+      return { ok: false, error: t('errors.playlistNotFound') }
+    }
+
+    const trackIds = playlist.trackIds || []
+    const allIn = albumTrackIds.every((id) => trackIds.some((tid) => idEq(tid, id)))
+
+    try {
+      if (allIn) {
+        for (const id of albumTrackIds) {
+          await catalogApi.removeTrackFromPlaylist(playlistId, id)
+        }
+      } else {
+        const missing = albumTrackIds.filter((id) => !trackIds.some((tid) => idEq(tid, id)))
+        for (const id of missing) {
+          await catalogApi.addTrackToPlaylist(playlistId, id)
+        }
+      }
+      await refreshCatalog()
+      const next = await catalogApi.getPlaylist(playlistId)
+      return {
+        ok: true,
+        added: !allIn,
+        playlist: mapPlaylistFromApi(next, getUserMaps()),
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.playlistNotFound'))
+    }
+  }
+
+  function isVerifiedArtist(user = currentUser) {
+    return Boolean(user && user.role === 'artist' && user.status === 'approved')
+  }
+
+  function requireVerifiedArtist() {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.worksLoginRequired') }
+    }
+    if (!isVerifiedArtist(currentUser)) {
+      return { ok: false, error: t('errors.worksArtistsOnly') }
+    }
+    return { ok: true }
+  }
+
+  function parseCollaborators(value) {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean)
+    }
+    return String(value || '')
+      .split(/[,،]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  function normalizeAudio(audio) {
+    if (!audio || typeof audio !== 'object') return null
+    const name = String(audio.name || '').trim()
+    if (!name) return null
+    return {
+      name,
+      size: Number(audio.size) || 0,
+      type: String(audio.type || ''),
+    }
+  }
+
+  function estimateRevenue(plays) {
+    return Math.round((Number(plays) || 0) * 42)
+  }
+
+  function getOwnedAlbums(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+    return albums.filter((a) => idEq(a.artistId, userId))
+  }
+
+  function getOwnedSingles(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+    return tracks.filter((tr) => idEq(tr.artistId, userId) && !tr.albumId)
+  }
+
+  function getOwnedWorks(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return { albums: [], singles: [] }
+    return {
+      albums: getOwnedAlbums(userId),
+      singles: getOwnedSingles(userId),
+    }
+  }
+
+  function getAlbumStats(albumId) {
+    void catalogVersion
+    const album = albums.find((a) => idEq(a.id, albumId))
+    const albumTracks = tracks.filter((tr) => idEq(tr.albumId, albumId))
+    const streams = albumTracks.reduce((sum, tr) => sum + (tr.plays || 0), 0)
+    const listeners = Math.max(
+      album?.listeners || 0,
+      ...albumTracks.map((tr) => tr.listeners || 0),
+      0,
     )
+    return {
+      listeners,
+      streams,
+      revenue: estimateRevenue(streams),
+      trackCount: albumTracks.length,
+    }
+  }
+
+  function getTrackStats(trackId) {
+    void catalogVersion
+    const track = tracks.find((tr) => idEq(tr.id, trackId))
+    const streams = track?.plays || 0
+    return {
+      listeners: track?.listeners || 0,
+      streams,
+      revenue: estimateRevenue(streams),
+      trackCount: track ? 1 : 0,
+    }
+  }
+
+  async function publishWork(payload) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const releaseType = payload?.releaseType === 'album' ? 'album' : 'single'
+    const title = String(payload?.title ?? '').trim()
+    if (!title) {
+      return { ok: false, error: t('errors.worksTitleRequired') }
+    }
+
+    const genre = String(payload?.genre ?? '').trim()
+    if (!genre) {
+      return { ok: false, error: t('errors.worksGenreRequired') }
+    }
+
+    const year = Number(payload?.releaseYear)
+    if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+      return { ok: false, error: t('errors.worksYearInvalid') }
+    }
+
+    const releasedAt = yearToReleasedAt(year)
+    const collaborators = parseCollaborators(payload?.collaborators)
+    const earlyAccess = Boolean(payload?.earlyAccess)
+    const cover = String(payload?.cover || '').trim()
+
+    try {
+      const maps = getUserMaps()
+      const artistId = toApiUserId(currentUser.id, maps)
+
+      if (releaseType === 'single') {
+        const audio = normalizeAudio(payload?.audio)
+        if (!audio) {
+          return { ok: false, error: t('errors.worksAudioRequired') }
+        }
+
+        const track = await catalogApi.createTrack({
+          title,
+          artistId,
+          albumId: null,
+          cover,
+          releasedAt,
+          earlyAccess,
+          genre,
+          collaborators,
+          lyrics: payload?.lyrics || '',
+          audio,
+        })
+        await refreshCatalog()
+        return { ok: true, kind: 'single', track: mapTrackFromApi(track, getUserMaps()) }
+      }
+
+      const inputTracks = Array.isArray(payload?.tracks) ? payload.tracks : []
+      if (inputTracks.length === 0) {
+        return { ok: false, error: t('errors.worksAlbumTracksRequired') }
+      }
+
+      const album = await catalogApi.createAlbum({
+        title,
+        artistId,
+        cover,
+        releasedAt,
+        earlyAccess,
+        genre,
+        collaborators: [],
+      })
+
+      const createdTracks = []
+      for (const item of inputTracks) {
+        const trackTitle = String(item?.title ?? '').trim()
+        if (!trackTitle) {
+          return { ok: false, error: t('errors.worksTrackTitleRequired') }
+        }
+        const audio = normalizeAudio(item?.audio)
+        if (!audio) {
+          return { ok: false, error: t('errors.worksAudioRequired') }
+        }
+        const track = await catalogApi.addTrackToAlbum(album.id, {
+          title: trackTitle,
+          lyrics: item?.lyrics || '',
+          audio,
+          collaborators: parseCollaborators(item?.collaborators),
+        })
+        createdTracks.push(mapTrackFromApi(track, getUserMaps()))
+      }
+
+      await refreshCatalog()
+      return {
+        ok: true,
+        kind: 'album',
+        album: mapAlbumFromApi(album, getUserMaps()),
+        tracks: createdTracks,
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksTitleRequired'))
+    }
+  }
+
+  async function updateAlbum(albumId, patch) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const album = albums.find((a) => idEq(a.id, albumId))
+    if (!album || !idEq(album.artistId, currentUser.id)) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const body = {}
+    if (patch.title != null) {
+      const nextTitle = String(patch.title).trim()
+      if (!nextTitle) return { ok: false, error: t('errors.worksTitleRequired') }
+      body.title = nextTitle
+    }
+    if (patch.genre != null) {
+      const nextGenre = String(patch.genre).trim()
+      if (!nextGenre) return { ok: false, error: t('errors.worksGenreRequired') }
+      body.genre = nextGenre
+    }
+    if (patch.releaseYear != null) {
+      const year = Number(patch.releaseYear)
+      if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+        return { ok: false, error: t('errors.worksYearInvalid') }
+      }
+      body.releasedAt = yearToReleasedAt(year)
+    }
+    if (patch.cover != null) {
+      body.cover = String(patch.cover).trim() || album.cover
+    }
+    if (patch.earlyAccess != null) {
+      body.earlyAccess = Boolean(patch.earlyAccess)
+    }
+
+    try {
+      const updated = await catalogApi.updateAlbum(albumId, body)
+      await refreshCatalog()
+      return { ok: true, album: mapAlbumFromApi(updated, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
+  }
+
+  async function deleteAlbum(albumId) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const album = albums.find((a) => idEq(a.id, albumId))
+    if (!album || !idEq(album.artistId, currentUser.id)) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    try {
+      await catalogApi.deleteAlbum(albumId)
+      await refreshCatalog()
+      return { ok: true }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
+  }
+
+  async function updateTrack(trackId, patch) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const track = tracks.find((tr) => idEq(tr.id, trackId))
+    if (!track || !idEq(track.artistId, currentUser.id)) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const body = {}
+    if (patch.title != null) {
+      const nextTitle = String(patch.title).trim()
+      if (!nextTitle) return { ok: false, error: t('errors.worksTrackTitleRequired') }
+      body.title = nextTitle
+    }
+    if (patch.genre != null) {
+      const nextGenre = String(patch.genre).trim()
+      if (!nextGenre) return { ok: false, error: t('errors.worksGenreRequired') }
+      body.genre = nextGenre
+    }
+    if (patch.releaseYear != null) {
+      const year = Number(patch.releaseYear)
+      if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+        return { ok: false, error: t('errors.worksYearInvalid') }
+      }
+      body.releasedAt = yearToReleasedAt(year)
+    }
+    if (patch.collaborators != null) {
+      body.collaborators = parseCollaborators(patch.collaborators)
+    }
+    if (patch.lyrics != null) {
+      body.lyrics = String(patch.lyrics)
+    }
+    if (patch.audio != null) {
+      const audio = normalizeAudio(patch.audio)
+      if (!audio) return { ok: false, error: t('errors.worksAudioRequired') }
+      body.audio = audio
+    }
+    if (patch.cover != null) {
+      body.cover = String(patch.cover).trim() || track.cover
+    }
+    if (patch.earlyAccess != null) {
+      body.earlyAccess = Boolean(patch.earlyAccess)
+    }
+
+    try {
+      const updated = await catalogApi.updateTrack(trackId, body)
+      await refreshCatalog()
+      return { ok: true, track: mapTrackFromApi(updated, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
+  }
+
+  async function deleteTrack(trackId) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const track = tracks.find((tr) => idEq(tr.id, trackId))
+    if (!track || !idEq(track.artistId, currentUser.id)) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    try {
+      await catalogApi.deleteTrack(trackId)
+      await refreshCatalog()
+      return { ok: true }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
+  }
+
+  async function addTrackToAlbum(albumId, payload) {
+    const gate = requireVerifiedArtist()
+    if (!gate.ok) return gate
+
+    const album = albums.find((a) => idEq(a.id, albumId))
+    if (!album || !idEq(album.artistId, currentUser.id)) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+
+    const title = String(payload?.title ?? '').trim()
+    if (!title) {
+      return { ok: false, error: t('errors.worksTrackTitleRequired') }
+    }
+    const audio = normalizeAudio(payload?.audio)
+    if (!audio) {
+      return { ok: false, error: t('errors.worksAudioRequired') }
+    }
+
+    try {
+      const track = await catalogApi.addTrackToAlbum(albumId, {
+        title,
+        lyrics: payload?.lyrics || '',
+        audio,
+        collaborators: parseCollaborators(payload?.collaborators),
+      })
+      await refreshCatalog()
+      return { ok: true, track: mapTrackFromApi(track, getUserMaps()) }
+    } catch (error) {
+      return apiFailure(error, t('errors.worksNotFound'))
+    }
+  }
+
+  function getAllNotifications() {
+    void catalogVersion
+    return storage.getItem('notifications', [])
+  }
+
+  function persistNotifications(list) {
+    storage.setItem('notifications', list)
+    bumpCatalog()
+  }
+
+  function getNotifications(userId = currentUser?.id) {
+    void catalogVersion
+    if (!userId) return []
+
+    const preference = getUserSettings(getUserById(userId) || currentUser).notifications
+    if (preference === 'none') return []
+
+    return getAllNotifications()
+      .filter((n) => n.userId === userId)
+      .filter((n) => (preference === 'important' ? n.important : true))
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  }
+
+  function getUnreadNotificationCount(userId = currentUser?.id) {
+    return getNotifications(userId).filter((n) => !n.read).length
+  }
+
+  function markNotificationRead(notificationId) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.userNotFound') }
+    }
+
+    const list = getAllNotifications()
+    const target = list.find((n) => n.id === notificationId && n.userId === currentUser.id)
+    if (!target) {
+      return { ok: false, error: t('notifications.notFound') }
+    }
+
+    persistNotifications(
+      list.map((n) => (n.id === notificationId ? { ...n, read: true } : n)),
+    )
+    return { ok: true }
+  }
+
+  function markAllNotificationsRead() {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.userNotFound') }
+    }
+
+    const list = getAllNotifications()
+    persistNotifications(
+      list.map((n) =>
+        n.userId === currentUser.id && !n.read ? { ...n, read: true } : n,
+      ),
+    )
+    return { ok: true }
+  }
+
+  function deleteNotification(notificationId) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.userNotFound') }
+    }
+
+    const list = getAllNotifications()
+    const target = list.find((n) => n.id === notificationId && n.userId === currentUser.id)
+    if (!target) {
+      return { ok: false, error: t('notifications.notFound') }
+    }
+
+    persistNotifications(list.filter((n) => n.id !== notificationId))
+    return { ok: true }
+  }
+
+  function isStaff(user = currentUser) {
+    return Boolean(user && (user.role === 'support' || user.role === 'admin'))
+  }
+
+  function isAdmin(user = currentUser) {
+    return Boolean(user && user.role === 'admin')
+  }
+
+  function isSupport(user = currentUser) {
+    return Boolean(user && user.role === 'support')
+  }
+
+  function requireStaff() {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.staffLoginRequired') }
+    }
+    if (!isStaff(currentUser)) {
+      return { ok: false, error: t('errors.staffOnly') }
+    }
+    return { ok: true }
+  }
+
+  function requireAdmin() {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+    if (!isAdmin(currentUser)) {
+      return { ok: false, error: t('errors.adminOnly') }
+    }
+    return { ok: true }
+  }
+
+  function pushNotification(notification) {
+    const list = storage.getItem('notifications', [])
+    storage.setItem('notifications', [notification, ...list])
+  }
+
+  function getPendingArtists() {
+    void catalogVersion
+    const gate = requireStaff()
+    if (!gate.ok) return []
+    return getUsers()
+      .filter((u) => u.role === 'artist' && u.status === 'pending')
+      .sort((a, b) => String(b.id).localeCompare(String(a.id)))
+  }
+
+  function approveArtist(artistId) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    const users = getUsers()
+    const artist = users.find((u) => u.id === artistId && u.role === 'artist')
+    if (!artist) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+    if (artist.status !== 'pending') {
+      return { ok: false, error: t('errors.artistNotPending') }
+    }
+
+    const artistCode =
+      artist.artistCode || `ART-${String(Date.now()).slice(-6)}`
+    const nextUsers = users.map((u) =>
+      u.id === artistId
+        ? { ...u, status: 'approved', artistCode, samples: u.samples || [] }
+        : u,
+    )
+    persistUsers(nextUsers)
+    if (currentUser?.id === artistId) {
+      setCurrentUser(nextUsers.find((u) => u.id === artistId))
+    }
+
+    pushNotification({
+      id: `n-approved-${artistId}-${Date.now()}`,
+      userId: artistId,
+      type: 'artist_approved',
+      important: true,
+      params: {},
+      link: '/profile',
+      createdAt: new Date().toISOString(),
+      read: false,
+    })
+    bumpCatalog()
+    return { ok: true, user: nextUsers.find((u) => u.id === artistId) }
+  }
+
+  function rejectArtist(artistId, reason) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    const reasonText = String(reason ?? '').trim()
+    if (!reasonText) {
+      return { ok: false, error: t('errors.rejectReasonRequired') }
+    }
+
+    const users = getUsers()
+    const artist = users.find((u) => u.id === artistId && u.role === 'artist')
+    if (!artist) {
+      return { ok: false, error: t('errors.worksNotFound') }
+    }
+    if (artist.status !== 'pending') {
+      return { ok: false, error: t('errors.artistNotPending') }
+    }
+
+    const nextUsers = users.map((u) =>
+      u.id === artistId ? { ...u, status: 'rejected' } : u,
+    )
+    persistUsers(nextUsers)
+
+    pushNotification({
+      id: `n-rejected-${artistId}-${Date.now()}`,
+      userId: artistId,
+      type: 'artist_rejected',
+      important: true,
+      params: { reasonFa: reasonText, reasonEn: reasonText },
+      link: null,
+      createdAt: new Date().toISOString(),
+      read: false,
+    })
     bumpCatalog()
     return { ok: true }
   }
 
-  function toggleTrackInPlaylist(playlistId, trackId) {
-    if (!currentUser) {
-      return { ok: false, error: 'برای مدیریت پلی‌لیست وارد شوید.' }
+  function getTickets() {
+    void catalogVersion
+    const gate = requireStaff()
+    if (!gate.ok) return []
+    return storage
+      .getItem('tickets', [])
+      .slice()
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  }
+
+  function getTicketById(ticketId) {
+    void catalogVersion
+    return storage.getItem('tickets', []).find((item) => item.id === ticketId) || null
+  }
+
+  function replyToTicket(ticketId, body) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    const text = String(body ?? '').trim()
+    if (!text) {
+      return { ok: false, error: t('errors.ticketReplyRequired') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    const tickets = storage.getItem('tickets', [])
+    const ticket = tickets.find((item) => item.id === ticketId)
+    if (!ticket) {
+      return { ok: false, error: t('errors.ticketNotFound') }
     }
-    if (playlist.ownerId !== currentUser.id) {
-      return { ok: false, error: 'فقط پلی‌لیست‌های خودتان را می‌توانید ویرایش کنید.' }
+    if (ticket.status === 'closed') {
+      return { ok: false, error: t('errors.ticketClosed') }
     }
 
-    const trackIds = playlist.trackIds || []
-    const hasTrack = trackIds.includes(trackId)
-    const nextTrackIds = hasTrack
-      ? trackIds.filter((id) => id !== trackId)
-      : [...trackIds, trackId]
+    const message = {
+      id: `tm-${Date.now()}`,
+      senderId: currentUser.id,
+      senderRole: 'staff',
+      body: text,
+      createdAt: new Date().toISOString(),
+    }
 
-    const next = playlists.map((p) =>
-      p.id === playlistId ? { ...p, trackIds: nextTrackIds } : p,
+    const next = tickets.map((item) =>
+      item.id === ticketId
+        ? {
+            ...item,
+            status: 'answered',
+            messages: [...(item.messages || []), message],
+          }
+        : item,
     )
-    storage.setItem('playlists', next)
+    storage.setItem('tickets', next)
     bumpCatalog()
+    return { ok: true, ticket: next.find((item) => item.id === ticketId) }
+  }
+
+  function updateTicketStatus(ticketId, status) {
+    const gate = requireStaff()
+    if (!gate.ok) return gate
+
+    if (!['open', 'answered', 'closed'].includes(status)) {
+      return { ok: false, error: t('errors.ticketStatusInvalid') }
+    }
+
+    const tickets = storage.getItem('tickets', [])
+    const ticket = tickets.find((item) => item.id === ticketId)
+    if (!ticket) {
+      return { ok: false, error: t('errors.ticketNotFound') }
+    }
+
+    const next = tickets.map((item) =>
+      item.id === ticketId ? { ...item, status } : item,
+    )
+    storage.setItem('tickets', next)
+    bumpCatalog()
+    return { ok: true, ticket: next.find((item) => item.id === ticketId) }
+  }
+
+  function getPayouts() {
+    void catalogVersion
+    const gate = requireStaff()
+    if (!gate.ok) return []
+    return storage
+      .getItem('payouts', [])
+      .slice()
+      .sort((a, b) => String(b.month).localeCompare(String(a.month)))
+  }
+
+  function settlePayout(payoutId) {
+    const gate = requireAdmin()
+    if (!gate.ok) return gate
+
+    const payouts = storage.getItem('payouts', [])
+    const payout = payouts.find((item) => item.id === payoutId)
+    if (!payout) {
+      return { ok: false, error: t('errors.payoutNotFound') }
+    }
+    if (payout.status === 'settled') {
+      return { ok: false, error: t('errors.payoutAlreadySettled') }
+    }
+
+    const next = payouts.map((item) =>
+      item.id === payoutId ? { ...item, status: 'settled' } : item,
+    )
+    storage.setItem('payouts', next)
+
+    pushNotification({
+      id: `n-finance-${payout.artistId}-${Date.now()}`,
+      userId: payout.artistId,
+      type: 'monthly_finance',
+      important: true,
+      params: {
+        year: Number(String(payout.month).slice(0, 4)),
+        month: Number(String(payout.month).slice(5, 7)),
+        amount: payout.rewardAmount,
+      },
+      link: '/profile',
+      createdAt: new Date().toISOString(),
+      read: false,
+    })
+    bumpCatalog()
+    return { ok: true, payout: next.find((item) => item.id === payoutId) }
+  }
+
+  function getSubscriptionPrices() {
+    void catalogVersion
     return {
-      ok: true,
-      added: !hasTrack,
-      playlist: next.find((p) => p.id === playlistId),
+      ...DEFAULT_SUBSCRIPTION_PRICES,
+      ...storage.getItem('subscriptionPrices', DEFAULT_SUBSCRIPTION_PRICES),
     }
   }
 
-  function toggleAlbumInPlaylist(playlistId, albumId) {
-    const tracks = storage.getItem('tracks', [])
-    const albumTrackIds = tracks
-      .filter((t) => t.albumId === albumId)
-      .map((t) => t.id)
+  function updateSubscriptionPrices({ silver, gold }) {
+    const gate = requireAdmin()
+    if (!gate.ok) return gate
 
-    if (albumTrackIds.length === 0) {
-      return { ok: false, error: 'این آلبوم آهنگی ندارد.' }
+    const silverPrice = Number(silver)
+    const goldPrice = Number(gold)
+    if (!Number.isFinite(silverPrice) || silverPrice < 0) {
+      return { ok: false, error: t('errors.priceInvalid') }
+    }
+    if (!Number.isFinite(goldPrice) || goldPrice < 0) {
+      return { ok: false, error: t('errors.priceInvalid') }
     }
 
-    const playlists = storage.getItem('playlists', [])
-    const playlist = playlists.find((p) => p.id === playlistId)
-    if (!playlist || playlist.ownerId !== currentUser?.id) {
-      return { ok: false, error: 'پلی‌لیست پیدا نشد.' }
+    const next = {
+      silver: Math.round(silverPrice),
+      gold: Math.round(goldPrice),
+      updatedAt: new Date().toISOString(),
     }
-
-    const trackIds = playlist.trackIds || []
-    const allIn = albumTrackIds.every((id) => trackIds.includes(id))
-
-    let nextTrackIds
-    if (allIn) {
-      nextTrackIds = trackIds.filter((id) => !albumTrackIds.includes(id))
-    } else {
-      const missing = albumTrackIds.filter((id) => !trackIds.includes(id))
-      nextTrackIds = [...trackIds, ...missing]
-    }
-
-    const next = playlists.map((p) =>
-      p.id === playlistId ? { ...p, trackIds: nextTrackIds } : p,
-    )
-    storage.setItem('playlists', next)
+    storage.setItem('subscriptionPrices', next)
     bumpCatalog()
+    return { ok: true, prices: next }
+  }
+
+  function getSubscriptionStats() {
+    void catalogVersion
+    const users = getUsers().filter(
+      (u) => u.role === 'listener' || u.role === 'artist',
+    )
+    const counts = { basic: 0, silver: 0, gold: 0 }
+    users.forEach((u) => {
+      const plan = u.subscription || 'basic'
+      if (plan === 'silver') counts.silver += 1
+      else if (plan === 'gold') counts.gold += 1
+      else counts.basic += 1
+    })
+
+    const prices = getSubscriptionPrices()
+    const monthlyRevenue =
+      counts.silver * (prices.silver || 0) + counts.gold * (prices.gold || 0)
+
     return {
-      ok: true,
-      added: !allIn,
-      playlist: next.find((p) => p.id === playlistId),
+      counts,
+      totalUsers: users.length,
+      monthlyRevenue,
+      prices,
     }
   }
 
@@ -345,10 +1344,45 @@ export function AuthProvider({ children }) {
     deletePlaylist,
     toggleTrackInPlaylist,
     toggleAlbumInPlaylist,
+    isVerifiedArtist,
+    getOwnedAlbums,
+    getOwnedSingles,
+    getOwnedWorks,
+    getAlbumStats,
+    getTrackStats,
+    estimateRevenue,
+    publishWork,
+    updateAlbum,
+    deleteAlbum,
+    updateTrack,
+    deleteTrack,
+    addTrackToAlbum,
+    getNotifications,
+    getUnreadNotificationCount,
+    markNotificationRead,
+    markAllNotificationsRead,
+    deleteNotification,
+    isStaff,
+    isAdmin,
+    isSupport,
+    getPendingArtists,
+    approveArtist,
+    rejectArtist,
+    getTickets,
+    getTicketById,
+    replyToTicket,
+    updateTicketStatus,
+    getPayouts,
+    settlePayout,
+    getSubscriptionPrices,
+    updateSubscriptionPrices,
+    getSubscriptionStats,
     getUserById,
     getUserByUsername,
     isUsernameTaken,
     updateUser,
+    updateSettings,
+    deleteAccount,
     toggleFollow,
     defaultAvatar: DEFAULT_AVATAR,
     playlistLimits: PLAYLIST_LIMITS,

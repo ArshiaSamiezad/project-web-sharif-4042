@@ -1,0 +1,36 @@
+/* Developer: Moeid Nadi - 402106683 */
+
+.lyrics {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  padding: 1rem 0.5rem;
+  mask-image: linear-gradient(to bottom, transparent, black 6%, black 94%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 6%, black 94%, transparent);
+}
+
+.lyrics__line {
+  margin: 0;
+  padding: 0.4rem 0;
+  font-family: var(--font-body);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 82%, transparent);
+  text-align: center;
+}
+
+.lyrics__line--blank {
+  height: 1rem;
+}
+
+.lyrics--empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 1.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}

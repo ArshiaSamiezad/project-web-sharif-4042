@@ -1,3 +1,13 @@
+const SAMPLE_AUDIO_URLS = [
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+];
+
+const audioFor = (index) => {
+  return SAMPLE_AUDIO_URLS[index % SAMPLE_AUDIO_URLS.length];
+};
 export const DEFAULT_AVATAR =
   'data:image/svg+xml,' +
   encodeURIComponent(
@@ -13,12 +23,18 @@ function cover(id) {
   return `https://picsum.photos/seed/sepatify-${id}/400/400`
 }
 
-const SEED_VERSION = 7
+const SEED_VERSION = 11
 
 export const PLAYLIST_LIMITS = {
   basic: 6,
   silver: 100,
   gold: Infinity,
+}
+
+export const DEFAULT_SUBSCRIPTION_PRICES = {
+  silver: 99000,
+  gold: 199000,
+  updatedAt: '2026-07-01T00:00:00.000Z',
 }
 
 const SEED_USERS = [
@@ -36,7 +52,7 @@ const SEED_USERS = [
     followers: ['u-gold'],
     following: ['u-gold', 'u-artist'],
     dailyStreams: 12,
-    recentPlaylistIds: ['pl-1', 'pl-3'],
+    recentPlaylistIds: [],
   },
   {
     id: 'u-gold',
@@ -52,7 +68,7 @@ const SEED_USERS = [
     followers: ['u-listener', 'u-silver'],
     following: ['u-artist'],
     dailyStreams: 40,
-    recentPlaylistIds: ['pl-2', 'pl-4'],
+    recentPlaylistIds: [],
   },
   {
     id: 'u-silver',
@@ -78,6 +94,7 @@ const SEED_USERS = [
     username: 'user_artist',
     role: 'artist',
     artistName: 'هنرمند نمونه',
+    artistCode: 'ART-1001',
     bio: 'هنرمند الکترونیک با تمرکز روی فضای شهری و بافت صوتی شبانه. از سال ۱۳۹۸ در حال انتشار تک‌آهنگ و آلبوم در سپتیفای است.',
     subscription: 'basic',
     avatar: null,
@@ -85,6 +102,54 @@ const SEED_USERS = [
     birthDate: null,
     gender: null,
     followers: ['u-listener', 'u-gold'],
+    following: [],
+    dailyStreams: 0,
+    recentPlaylistIds: [],
+  },
+  {
+    id: 'u-pending-1',
+    email: 'pending1@sepatify.test',
+    password: 'password',
+    displayName: 'آوای سپید',
+    username: 'user_avaye',
+    role: 'artist',
+    artistName: 'آوای سپید',
+    artistCode: null,
+    bio: '',
+    samples: [
+      { name: 'sepid-demo.mp3', size: 4200000, type: 'audio/mpeg' },
+      { name: 'sepid-live.wav', size: 18600000, type: 'audio/wav' },
+    ],
+    subscription: 'basic',
+    avatar: null,
+    status: 'pending',
+    birthDate: null,
+    gender: null,
+    followers: [],
+    following: [],
+    dailyStreams: 0,
+    recentPlaylistIds: [],
+  },
+  {
+    id: 'u-pending-2',
+    email: 'pending2@sepatify.test',
+    password: 'password',
+    displayName: 'شب‌گرد',
+    username: 'user_shabgard',
+    role: 'artist',
+    artistName: 'شب‌گرد',
+    artistCode: null,
+    bio: '',
+    samples: [
+      { name: 'night-walk.flac', size: 24100000, type: 'audio/flac' },
+      { name: 'cover-art.png', size: 820000, type: 'image/png' },
+    ],
+    subscription: 'basic',
+    avatar: null,
+    status: 'pending',
+    birthDate: null,
+    gender: null,
+    followers: [],
     following: [],
     dailyStreams: 0,
     recentPlaylistIds: [],
@@ -164,6 +229,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-06-01',
     listeners: 12400,
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['استودیو شب'],
   },
   {
     id: 'al-2',
@@ -174,6 +241,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-06-20',
     listeners: 9800,
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: [],
   },
   {
     id: 'al-3',
@@ -184,6 +253,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-07-10',
     listeners: 2100,
     earlyAccess: true,
+    genre: 'ایندی',
+    collaborators: ['نور زرد'],
   },
   {
     id: 'al-4',
@@ -194,6 +265,8 @@ const SEED_ALBUMS = [
     releasedAt: '2026-07-12',
     listeners: 1500,
     earlyAccess: true,
+    genre: 'الکترونیک',
+    collaborators: [],
   },
 ]
 
@@ -205,10 +278,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: 'al-1',
     cover: cover('tr-1'),
+    coverImage: cover('tr-1'),
+    audioUrl: audioFor(0),
     plays: 18240,
     listeners: 9100,
     releasedAt: '2026-06-01',
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['استودیو شب'],
+    lyrics: 'موج اول از دوردست می‌آید\nساحل خاموش را بیدار می‌کند',
+    audio: { name: 'moj-aval.flac', size: 28400000, type: 'audio/flac' },
   },
   {
     id: 'tr-2',
@@ -217,10 +296,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: 'al-2',
     cover: cover('tr-2'),
+    coverImage: cover('tr-2'),
+    audioUrl: audioFor(1),
     plays: 22100,
     listeners: 11200,
     releasedAt: '2026-06-20',
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: [],
+    lyrics: 'پنجره نور را باز کن\nشهر هنوز خواب است',
+    audio: { name: 'panjere-noor.wav', size: 41200000, type: 'audio/wav' },
   },
   {
     id: 'tr-3',
@@ -229,10 +314,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: 'al-1',
     cover: cover('tr-3'),
+    coverImage: cover('tr-3'),
+    audioUrl: audioFor(2),
     plays: 15680,
     listeners: 7800,
     releasedAt: '2026-06-01',
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['استودیو شب'],
+    lyrics: 'گام‌های آهسته روی سنگفرش خیس\nپژواک شب در کوچه می‌پیچد',
+    audio: { name: 'gamaha.mp3', size: 8200000, type: 'audio/mpeg' },
   },
   {
     id: 'tr-4',
@@ -241,10 +332,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: 'al-3',
     cover: cover('tr-4'),
+    coverImage: cover('tr-4'),
+    audioUrl: audioFor(3),
     plays: 980,
     listeners: 620,
     releasedAt: '2026-07-10',
     earlyAccess: true,
+    genre: 'ایندی',
+    collaborators: ['نور زرد'],
+    lyrics: 'پیش‌نمایش طلایی پیش از طلوع\nفقط برای شنوندگان طلایی',
+    audio: { name: 'preview-gold.mp3', size: 6400000, type: 'audio/mpeg' },
   },
   {
     id: 'tr-5',
@@ -253,10 +350,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: 'al-4',
     cover: cover('tr-5'),
+    coverImage: cover('tr-5'),
+    audioUrl: audioFor(4),
     plays: 640,
     listeners: 410,
     releasedAt: '2026-07-12',
     earlyAccess: true,
+    genre: 'الکترونیک',
+    collaborators: [],
+    lyrics: 'انحصاری سپتیفای\nدر نیمه‌شب خاکستری',
+    audio: { name: 'exclusive.flac', size: 30100000, type: 'audio/flac' },
   },
   {
     id: 'tr-6',
@@ -265,10 +368,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: null,
     cover: cover('tr-6'),
+    coverImage: cover('tr-6'),
+    audioUrl: audioFor(5),
     plays: 30120,
     listeners: 15400,
     releasedAt: '2026-05-18',
     earlyAccess: false,
+    genre: 'الکترونیک',
+    collaborators: ['دی‌جی یخ'],
+    lyrics: 'ریتم سرد روی پوست شهر\nنبض مترو و نور نئون',
+    audio: { name: 'rhythm-sard.wav', size: 38800000, type: 'audio/wav' },
   },
   {
     id: 'tr-7',
@@ -277,10 +386,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: null,
     cover: cover('tr-7'),
+    coverImage: cover('tr-7'),
+    audioUrl: audioFor(6),
     plays: 12450,
     listeners: 6200,
     releasedAt: '2026-04-02',
     earlyAccess: false,
+    genre: 'سینث‌ویو',
+    collaborators: [],
+    lyrics: 'نور نئون در مه زرد\nسایه ما روی دیوار می‌رقصد',
+    audio: { name: 'neon-light.mp3', size: 9100000, type: 'audio/mpeg' },
   },
   {
     id: 'tr-8',
@@ -289,10 +404,16 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: null,
     cover: cover('tr-8'),
+    coverImage: cover('tr-8'),
+    audioUrl: audioFor(7),
     plays: 8900,
     listeners: 4300,
     releasedAt: '2026-07-01',
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: ['راه‌آهن صدا'],
+    lyrics: 'قطار شب از ایستگاه می‌گذرد\nچمدان‌های خالی، پنجره‌های مه گرفته',
+    audio: { name: 'train-night.flac', size: 26500000, type: 'audio/flac' },
   },
   {
     id: 'tr-9',
@@ -301,10 +422,271 @@ const SEED_TRACKS = [
     artistName: 'هنرمند نمونه',
     albumId: 'al-2',
     cover: cover('tr-9'),
+    coverImage: cover('tr-9'),
+    audioUrl: audioFor(8),
     plays: 7400,
     listeners: 3600,
     releasedAt: '2026-06-20',
     earlyAccess: false,
+    genre: 'امبینت',
+    collaborators: [],
+    lyrics: 'مه زرد روی بام‌ها نشسته\nشهر نفس می‌کشد آرام',
+    audio: { name: 'meh-zard.mp3', size: 7800000, type: 'audio/mpeg' },
+  },
+]
+
+const SEED_TICKETS = [
+  {
+    id: 'T-1042',
+    userId: 'u-listener',
+    userName: 'شنونده نمونه',
+    subject: 'مشکل در پخش پلی‌لیست',
+    status: 'open',
+    createdAt: '2026-07-21T15:10:00.000Z',
+    messages: [
+      {
+        id: 'tm-1042-1',
+        senderId: 'u-listener',
+        senderRole: 'user',
+        body: 'سلام، پلی‌لیست «شب‌های بارانی» برای من پخش نمی‌شود. لطفاً بررسی کنید.',
+        createdAt: '2026-07-21T15:10:00.000Z',
+      },
+    ],
+  },
+  {
+    id: 'T-1038',
+    userId: 'u-silver',
+    userName: 'کاربر نقره‌ای',
+    subject: 'سوال درباره سقف پلی‌لیست',
+    status: 'answered',
+    createdAt: '2026-07-15T09:40:00.000Z',
+    messages: [
+      {
+        id: 'tm-1038-1',
+        senderId: 'u-silver',
+        senderRole: 'user',
+        body: 'با اشتراک نقره‌ای چند پلی‌لیست می‌توانم بسازم؟',
+        createdAt: '2026-07-15T09:40:00.000Z',
+      },
+      {
+        id: 'tm-1038-2',
+        senderId: 'u-support',
+        senderRole: 'staff',
+        body: 'سلام! با اشتراک نقره‌ای می‌توانید تا ۱۰۰ پلی‌لیست بسازید. اگر نیاز به فضای بیشتر دارید، ارتقا به طلایی را در نظر بگیرید.',
+        createdAt: '2026-07-15T11:05:00.000Z',
+      },
+    ],
+  },
+  {
+    id: 'T-1021',
+    userId: 'u-gold',
+    userName: 'کاربر طلایی',
+    subject: 'درخواست بازپرداخت',
+    status: 'closed',
+    createdAt: '2026-07-05T12:00:00.000Z',
+    messages: [
+      {
+        id: 'tm-1021-1',
+        senderId: 'u-gold',
+        senderRole: 'user',
+        body: 'اشتراک طلایی را اشتباه خریده‌ام. امکان بازپرداخت هست؟',
+        createdAt: '2026-07-05T12:00:00.000Z',
+      },
+      {
+        id: 'tm-1021-2',
+        senderId: 'u-admin',
+        senderRole: 'staff',
+        body: 'درخواست شما ثبت شد. طبق سیاست فعلی، بازپرداخت در فاز دوم فعال می‌شود. تیکت را می‌بندیم.',
+        createdAt: '2026-07-06T08:20:00.000Z',
+      },
+    ],
+  },
+]
+
+const SEED_PAYOUTS = [
+  {
+    id: 'pay-1',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    artistCode: 'ART-1001',
+    month: '2026-07',
+    uniqueListeners: 15400,
+    streams: 89420,
+    rewardAmount: 3755640,
+    status: 'pending',
+  },
+  {
+    id: 'pay-2',
+    artistId: 'u-artist',
+    artistName: 'هنرمند نمونه',
+    artistCode: 'ART-1001',
+    month: '2026-06',
+    uniqueListeners: 12800,
+    streams: 74210,
+    rewardAmount: 3116820,
+    status: 'settled',
+  },
+]
+
+const SEED_NOTIFICATIONS = [
+  // Listener — subscription + followed artist release
+  {
+    id: 'n-listen-1',
+    userId: 'u-listener',
+    type: 'subscription_expiry',
+    important: true,
+    params: { days: 3, plan: 'basic' },
+    link: '/payment',
+    createdAt: '2026-07-21T09:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-listen-2',
+    userId: 'u-listener',
+    type: 'new_release',
+    important: false,
+    params: { artistName: 'هنرمند نمونه', workTitle: 'طلوع زرد' },
+    link: '/album/al-3',
+    createdAt: '2026-07-20T14:30:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-listen-3',
+    userId: 'u-listener',
+    type: 'new_release',
+    important: false,
+    params: { artistName: 'هنرمند نمونه', workTitle: 'ریتم سرد' },
+    link: '/catalog',
+    createdAt: '2026-07-10T11:00:00.000Z',
+    read: true,
+  },
+  // Gold listener
+  {
+    id: 'n-gold-1',
+    userId: 'u-gold',
+    type: 'new_release',
+    important: false,
+    params: { artistName: 'هنرمند نمونه', workTitle: 'نیمه‌شب خاکستری' },
+    link: '/album/al-4',
+    createdAt: '2026-07-19T16:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-gold-2',
+    userId: 'u-gold',
+    type: 'subscription_expiry',
+    important: true,
+    params: { days: 7, plan: 'gold' },
+    link: '/payment',
+    createdAt: '2026-07-18T08:00:00.000Z',
+    read: true,
+  },
+  // Silver
+  {
+    id: 'n-silver-1',
+    userId: 'u-silver',
+    type: 'subscription_expiry',
+    important: true,
+    params: { days: 2, plan: 'silver' },
+    link: '/payment',
+    createdAt: '2026-07-21T10:00:00.000Z',
+    read: false,
+  },
+  // Artist — approval + monthly finance
+  {
+    id: 'n-artist-1',
+    userId: 'u-artist',
+    type: 'artist_approved',
+    important: true,
+    params: {},
+    link: '/profile',
+    createdAt: '2026-06-01T12:00:00.000Z',
+    read: true,
+  },
+  {
+    id: 'n-artist-2',
+    userId: 'u-artist',
+    type: 'monthly_finance',
+    important: true,
+    params: { year: 2026, month: 6, amount: 12400000 },
+    link: '/profile',
+    createdAt: '2026-07-01T07:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-artist-3',
+    userId: 'u-artist',
+    type: 'artist_rejected',
+    important: true,
+    params: {
+      reasonFa: 'کیفیت نمونه کارها با استاندارد انتشار همخوانی نداشت.',
+      reasonEn: 'Sample quality did not meet the publishing standard.',
+    },
+    link: null,
+    createdAt: '2026-05-15T09:30:00.000Z',
+    read: true,
+  },
+  // Support
+  {
+    id: 'n-support-1',
+    userId: 'u-support',
+    type: 'new_ticket',
+    important: true,
+    params: { ticketId: 'T-1042', userName: 'شنونده نمونه' },
+    link: '/staff/tickets/T-1042',
+    createdAt: '2026-07-21T15:20:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-support-2',
+    userId: 'u-support',
+    type: 'artist_verification',
+    important: true,
+    params: { artistName: 'آوای سپید' },
+    link: '/staff/artists/u-pending-1',
+    createdAt: '2026-07-21T13:00:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-support-3',
+    userId: 'u-support',
+    type: 'new_ticket',
+    important: false,
+    params: { ticketId: 'T-1038', userName: 'کاربر نقره‌ای' },
+    link: '/staff/tickets/T-1038',
+    createdAt: '2026-07-15T10:00:00.000Z',
+    read: true,
+  },
+  // Admin
+  {
+    id: 'n-admin-1',
+    userId: 'u-admin',
+    type: 'artist_verification',
+    important: true,
+    params: { artistName: 'آوای سپید' },
+    link: '/staff/artists/u-pending-1',
+    createdAt: '2026-07-21T13:05:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-admin-2',
+    userId: 'u-admin',
+    type: 'new_ticket',
+    important: true,
+    params: { ticketId: 'T-1042', userName: 'شنونده نمونه' },
+    link: '/staff/tickets/T-1042',
+    createdAt: '2026-07-21T15:25:00.000Z',
+    read: false,
+  },
+  {
+    id: 'n-admin-3',
+    userId: 'u-admin',
+    type: 'artist_verification',
+    important: true,
+    params: { artistName: 'شب‌گرد' },
+    link: '/staff/artists/u-pending-2',
+    createdAt: '2026-07-12T09:00:00.000Z',
+    read: true,
   },
 ]
 
@@ -321,9 +703,13 @@ export function ensureSeedData(storage) {
     storage.setItem('users', [...SEED_USERS, ...customUsers])
   }
 
-  storage.setItem('playlists', SEED_PLAYLISTS)
-  storage.setItem('albums', SEED_ALBUMS)
-  storage.setItem('tracks', SEED_TRACKS)
+  storage.setItem('notifications', SEED_NOTIFICATIONS)
+  storage.setItem('tickets', SEED_TICKETS)
+  storage.setItem('payouts', SEED_PAYOUTS)
+  storage.setItem('subscriptionPrices', DEFAULT_SUBSCRIPTION_PRICES)
+  storage.removeItem('albums')
+  storage.removeItem('tracks')
+  storage.removeItem('playlists')
   storage.setItem('seeded', true)
   storage.setItem('seedVersion', SEED_VERSION)
 }

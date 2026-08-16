@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nProvider'
+import { idEq } from '../lib/ids'
 import './AddTracksModal.css'
 
 function matchesQuery(text, query) {
@@ -11,6 +13,7 @@ function matchesQuery(text, query) {
 
 export default function AddTracksModal({ open, playlistId, onClose }) {
   const { currentUser, getCatalog, toggleTrackInPlaylist, toggleAlbumInPlaylist } = useAuth()
+  const { t } = useI18n()
   const catalog = getCatalog()
   const titleId = useId()
   const inputRef = useRef(null)
@@ -19,7 +22,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
   const [expandedIds, setExpandedIds] = useState(() => new Set())
   const [collapsedIds, setCollapsedIds] = useState(() => new Set())
 
-  const playlist = catalog.playlists.find((p) => p.id === playlistId)
+  const playlist = catalog.playlists.find((p) => idEq(p.id, playlistId))
   const trackIds = playlist?.trackIds || []
   const isGold = currentUser?.subscription === 'gold'
   const normalizedQuery = query.trim().toLowerCase()
@@ -43,7 +46,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
     const albums = visibleAlbums
       .map((album) => {
         const albumTracks = visibleTracks
-          .filter((track) => track.albumId === album.id)
+          .filter((track) => idEq(track.albumId, album.id))
           .sort((a, b) => (b.plays || 0) - (a.plays || 0))
 
         if (!normalizedQuery) {
@@ -116,24 +119,24 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
     setCollapsedIds(new Set())
   }, [normalizedQuery])
 
-  if (!open || !playlist || playlist.ownerId !== currentUser?.id) return null
+  if (!open || !playlist || !idEq(playlist.ownerId, currentUser?.id)) return null
 
-  function handleToggleTrack(trackId) {
-    const result = toggleTrackInPlaylist(playlistId, trackId)
+  async function handleToggleTrack(trackId) {
+    const result = await toggleTrackInPlaylist(playlistId, trackId)
     if (!result.ok) {
       setMessage(result.error)
       return
     }
-    setMessage(result.added ? 'به پلی‌لیست افزوده شد.' : 'از پلی‌لیست حذف شد.')
+    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
   }
 
-  function handleToggleAlbum(albumId) {
-    const result = toggleAlbumInPlaylist(playlistId, albumId)
+  async function handleToggleAlbum(albumId) {
+    const result = await toggleAlbumInPlaylist(playlistId, albumId)
     if (!result.ok) {
       setMessage(result.error)
       return
     }
-    setMessage(result.added ? 'آلبوم به پلی‌لیست افزوده شد.' : 'آلبوم از پلی‌لیست حذف شد.')
+    setMessage(result.added ? t('playlists.addedFlash') : t('playlists.removedFlash'))
   }
 
   function isAlbumExpanded(albumId, autoExpand) {
@@ -172,21 +175,21 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
       >
         <header className="add-tracks-modal__head">
           <div>
-            <h2 id={titleId}>افزودن آهنگ</h2>
-            <p>به «{playlist.title}»</p>
+            <h2 id={titleId}>{t('playlists.addTracksTitle')}</h2>
+            <p>{t('playlists.addTracksTo', { title: playlist.title })}</p>
           </div>
           <button
             type="button"
             className="add-tracks-modal__close"
             onClick={onClose}
-            aria-label="بستن"
+            aria-label={t('common.close')}
           >
             ×
           </button>
         </header>
 
         <label className="add-tracks-modal__search">
-          <span className="visually-hidden">جستجو</span>
+          <span className="visually-hidden">{t('common.search')}</span>
           <span className="add-tracks-modal__search-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="11" cy="11" r="6.5" />
@@ -198,7 +201,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="جستجوی نام آهنگ، هنرمند یا آلبوم…"
+            placeholder={t('playlists.addTracksSearch')}
             autoComplete="off"
           />
         </label>
@@ -207,12 +210,12 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
 
         <div className="add-tracks-modal__list">
           {results.length === 0 ? (
-            <p className="add-tracks-modal__empty">موردی پیدا نشد.</p>
+            <p className="add-tracks-modal__empty">{t('playlists.nothingFound')}</p>
           ) : (
             results.map((item) => {
               if (item.type === 'single') {
                 const { track } = item
-                const inPlaylist = trackIds.includes(track.id)
+                const inPlaylist = trackIds.some((id) => idEq(id, track.id))
 
                 return (
                   <article key={track.id} className="add-tracks-modal__row">
@@ -234,8 +237,12 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
 
               const { album, tracks, allTracks, autoExpand } = item
               const isExpanded = isAlbumExpanded(album.id, autoExpand)
-              const allIn = allTracks.length > 0 && allTracks.every((t) => trackIds.includes(t.id))
-              const someIn = allTracks.some((t) => trackIds.includes(t.id))
+              const allIn =
+                allTracks.length > 0 &&
+                allTracks.every((track) => trackIds.some((id) => idEq(id, track.id)))
+              const someIn = allTracks.some((track) =>
+                trackIds.some((id) => idEq(id, track.id)),
+              )
 
               return (
                 <div key={album.id} className="add-tracks-modal__album-block">
@@ -273,7 +280,7 @@ export default function AddTracksModal({ open, playlistId, onClose }) {
                         <p className="add-tracks-modal__child-empty">آهنگی در این آلبوم نیست.</p>
                       ) : (
                         tracks.map((track) => {
-                          const inPlaylist = trackIds.includes(track.id)
+                          const inPlaylist = trackIds.some((id) => idEq(id, track.id))
                           return (
                             <article
                               key={track.id}

@@ -1,0 +1,115 @@
+/* Developer: Moeid Nadi - 402106683 */
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.15rem;
+}
+
+.controls__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 50%;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.controls__icon-btn:hover {
+  color: var(--color-text);
+  transform: scale(1.1);
+}
+
+.controls__icon-btn:active {
+  transform: scale(0.95);
+}
+
+.controls__icon-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.controls__icon-btn--secondary {
+  display: none;
+}
+
+.controls__icon-btn--secondary.is-active {
+  color: var(--color-illuminating);
+}
+
+.controls__repeat {
+  position: relative;
+}
+
+.controls__repeat-badge {
+  position: absolute;
+  top: -0.22rem;
+  inset-inline-end: -0.3rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--color-illuminating);
+  color: var(--color-on-accent);
+  font-size: 0.55rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.controls__play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-text);
+  color: var(--color-on-accent);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.controls__play-btn:hover {
+  transform: scale(1.08);
+  background: var(--color-illuminating-soft);
+}
+
+.controls__play-btn:active {
+  transform: scale(0.94);
+}
+
+.controls__play-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.controls__play-icon {
+  transform: translateX(1px);
+}
+
+[dir="rtl"] .controls__play-icon {
+  transform: translateX(-1px);
+}
+
+/* Shuffle/repeat show once there's room in the compact bottom-bar layout */
+@media (min-width: 640px) {
+  .controls__icon-btn--secondary {
+    display: inline-flex;
+  }
+}
+
+/* The expanded/full-screen variant always has room */
+.controls--sm .controls__icon-btn--secondary {
+  display: inline-flex;
+}
+
+.controls--sm .controls__play-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+}

@@ -2,7 +2,27 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
+from apps.users.models import User as CatalogUser
 from .models import ArtistVerification, User, UserPreference
+
+
+def sync_catalog_user(user, status=None):
+    verification = getattr(user, "artist_verification", None)
+    if status is None:
+        status = verification.status if verification else ""
+    catalog_role = "artist" if status else user.role
+    CatalogUser.objects.update_or_create(
+        email=user.email,
+        defaults={
+            "display_name": user.display_name,
+            "username": user.username,
+            "role": catalog_role,
+            "artist_name": user.artist_name or (verification.artist_name if verification else ""),
+            "status": status,
+            "subscription": user.subscription,
+        },
+    )
+
 
 class UserSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name")
@@ -16,6 +36,11 @@ class UserSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         verification = getattr(obj, "artist_verification", None)
         return verification.status if verification else "approved"
+
+    def update(self, instance, validated_data):
+        user = super().update(instance, validated_data)
+        sync_catalog_user(user)
+        return user
 
 class ListenerRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -34,7 +59,9 @@ class ListenerRegistrationSerializer(serializers.Serializer):
         except DjangoValidationError as exc: raise serializers.ValidationError({"password": list(exc.messages)}) from exc
         return attrs
     def create(self, data):
-        return User.objects.create_user(email=data["email"], password=data["password"], display_name=data["displayName"], birth_date=data["birthDate"], gender=data["gender"])
+        user = User.objects.create_user(email=data["email"], password=data["password"], display_name=data["displayName"], birth_date=data["birthDate"], gender=data["gender"])
+        sync_catalog_user(user)
+        return user
 
 class ArtistRegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -51,7 +78,8 @@ class ArtistRegistrationSerializer(serializers.Serializer):
     @transaction.atomic
     def create(self, data):
         user = User.objects.create_user(email=data["email"], password=data["password"], display_name=data["artistName"])
-        ArtistVerification.objects.create(applicant=user, artist_name=data["artistName"], sample_links=data["samples"])
+        verification = ArtistVerification.objects.create(applicant=user, artist_name=data["artistName"], sample_links=data["samples"])
+        sync_catalog_user(user, verification.status)
         return user
 
 class PreferenceSerializer(serializers.ModelSerializer):
