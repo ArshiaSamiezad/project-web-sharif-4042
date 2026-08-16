@@ -29,11 +29,12 @@ class FakeProvider:
         return payment.PaymentVerificationResult(success=self._success)
 
 
-def make_user(suffix):
+def make_user(suffix, role=User.Role.LISTENER):
     return User.objects.create(
         email=f'{suffix}@example.com',
         display_name=suffix,
         username=suffix,
+        role=role,
     )
 
 
@@ -523,3 +524,336 @@ class VerifyTransactionAtomicityTests(PlanMixin, TestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.subscription, User.Subscription.BASIC)
+
+
+class ReportsOverviewAPITests(PlanMixin, APITestCase):
+    def setUp(self):
+        super().setUp()
+        self.admin = make_user('report_admin', role=User.Role.ADMIN)
+
+    def _get(self, user_id=None):
+        params = {'userId': self.admin.id if user_id is None else user_id}
+        return self.client.get(reverse('subscription-reports-overview'), params)
+
+    # --- access / request validation -------------------------------------
+
+    def test_missing_user_id_returns_400(self):
+        response = self.client.get(reverse('subscription-reports-overview'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nonexistent_user_returns_404(self):
+        response = self._get(user_id=999999)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_non_admin_user_is_rejected(self):
+        listener = make_user('report_listener')
+        response = self._get(user_id=listener.id)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_support_staff_is_also_rejected(self):
+        # Only 'admin' passes, matching StaffSubscriptionsPage's isAdmin()
+        # gate exactly (isStaff() alone is not enough on that page).
+        support = make_user('report_support', role=User.Role.SUPPORT)
+        response = self._get(user_id=support.id)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    # --- empty database ----------------------------------------------------
+
+    def test_empty_database_reports_numeric_zero(self):
+        response = self._get()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        finance = response.data['finance']
+        self.assertEqual(finance['totalRevenue'], 0)
+        self.assertEqual(finance['successfulTransactionCount'], 0)
+        self.assertEqual(finance['pendingTransactionCount'], 0)
+        self.assertEqual(finance['failedTransactionCount'], 0)
+        self.assertEqual(finance['revenueByPlan'], [])
+        self.assertEqual(finance['revenueByDuration'], [])
+        self.assertEqual(finance['recentTransactions'], [])
+
+        subs = response.data['subscriptions']
+        self.assertEqual(subs['totalSubscriptionRecords'], 0)
+        self.assertEqual(subs['activeEffectiveSubscriptions'], 0)
+        self.assertEqual(subs['futureScheduledSubscriptions'], 0)
+        self.assertEqual(subs['expiredSubscriptions'], 0)
+        self.assertEqual(subs['cancelledSubscriptions'], 0)
+        self.assertEqual(subs['recentSubscriptions'], [])
+
+        dist = response.data['planDistribution']
+        self.assertEqual(dist['basicUsers'], 0)
+        self.assertEqual(dist['silverUsers'], 0)
+        self.assertEqual(dist['goldUsers'], 0)
+        self.assertEqual(dist['totalUsers'], 0)
+
+    # --- financial summary ---------------------------------------------
+
+    def test_successful_transaction_contributes_to_revenue(self):
+        user = make_user('fin_success')
+        Transaction.objects.create(
+            user=user,
+            plan=self.silver,
+            plan_tier_snapshot=self.silver.tier,
+            duration_months=1,
+            amount=self.silver.price_1_month,
+            status=Transaction.Status.SUCCESS,
+        )
+        finance = self._get().data['finance']
+        self.assertEqual(finance['totalRevenue'], self.silver.price_1_month)
+        self.assertEqual(finance['successfulTransactionCount'], 1)
+
+    def test_pending_transaction_does_not_contribute_to_revenue(self):
+        user = make_user('fin_pending')
+        Transaction.objects.create(
+            user=user,
+            plan=self.gold,
+            plan_tier_snapshot=self.gold.tier,
+            duration_months=1,
+            amount=self.gold.price_1_month,
+            status=Transaction.Status.PENDING,
+        )
+        finance = self._get().data['finance']
+        self.assertEqual(finance['totalRevenue'], 0)
+        self.assertEqual(finance['pendingTransactionCount'], 1)
+        self.assertEqual(finance['successfulTransactionCount'], 0)
+
+    def test_failed_transaction_does_not_contribute_to_revenue(self):
+        user = make_user('fin_failed')
+        Transaction.objects.create(
+            user=user,
+            plan=self.gold,
+            plan_tier_snapshot=self.gold.tier,
+            duration_months=1,
+            amount=self.gold.price_1_month,
+            status=Transaction.Status.FAILED,
+        )
+        finance = self._get().data['finance']
+        self.assertEqual(finance['totalRevenue'], 0)
+        self.assertEqual(finance['failedTransactionCount'], 1)
+        self.assertEqual(finance['successfulTransactionCount'], 0)
+
+    def test_revenue_uses_transaction_amount_snapshot_not_current_plan_price(self):
+        user = make_user('fin_snapshot')
+        Transaction.objects.create(
+            user=user,
+            plan=self.gold,
+            plan_tier_snapshot=self.gold.tier,
+            duration_months=1,
+            amount=12345,
+            status=Transaction.Status.SUCCESS,
+        )
+        self.gold.price_1_month = 999999
+        self.gold.save(update_fields=['price_1_month'])
+
+        finance = self._get().data['finance']
+        self.assertEqual(finance['totalRevenue'], 12345)
+
+    def test_revenue_by_plan_aggregation(self):
+        u1, u2 = make_user('fin_plan_1'), make_user('fin_plan_2')
+        Transaction.objects.create(
+            user=u1, plan=self.silver, plan_tier_snapshot='silver',
+            duration_months=1, amount=100, status=Transaction.Status.SUCCESS,
+        )
+        Transaction.objects.create(
+            user=u2, plan=self.gold, plan_tier_snapshot='gold',
+            duration_months=1, amount=200, status=Transaction.Status.SUCCESS,
+        )
+        by_plan = {row['tier']: row for row in self._get().data['finance']['revenueByPlan']}
+        self.assertEqual(by_plan['silver']['revenue'], 100)
+        self.assertEqual(by_plan['silver']['count'], 1)
+        self.assertEqual(by_plan['gold']['revenue'], 200)
+        self.assertEqual(by_plan['gold']['count'], 1)
+
+    def test_revenue_by_duration_aggregation(self):
+        user = make_user('fin_dur')
+        Transaction.objects.create(
+            user=user, plan=self.silver, plan_tier_snapshot='silver',
+            duration_months=3, amount=300, status=Transaction.Status.SUCCESS,
+        )
+        Transaction.objects.create(
+            user=user, plan=self.silver, plan_tier_snapshot='silver',
+            duration_months=3, amount=300, status=Transaction.Status.SUCCESS,
+        )
+        by_duration = {
+            row['durationMonths']: row for row in self._get().data['finance']['revenueByDuration']
+        }
+        self.assertEqual(by_duration[3]['revenue'], 600)
+        self.assertEqual(by_duration[3]['count'], 2)
+
+    def test_recent_transactions_ordering_is_deterministic(self):
+        user = make_user('fin_recent')
+        older = Transaction.objects.create(
+            user=user, plan=self.silver, plan_tier_snapshot='silver',
+            duration_months=1, amount=10, status=Transaction.Status.PENDING,
+        )
+        newer = Transaction.objects.create(
+            user=user, plan=self.silver, plan_tier_snapshot='silver',
+            duration_months=1, amount=20, status=Transaction.Status.PENDING,
+        )
+        ids = [item['transactionId'] for item in self._get().data['finance']['recentTransactions']]
+        self.assertEqual(ids[0], newer.id)
+        self.assertIn(older.id, ids)
+
+    # --- subscription summary -------------------------------------------
+
+    def test_effective_subscription_counted_as_active(self):
+        user = make_user('sub_effective')
+        UserSubscription.objects.create(
+            user=user, plan=self.silver,
+            start_date=self.today - timedelta(days=1),
+            end_date=self.today + timedelta(days=29),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        subs = self._get().data['subscriptions']
+        self.assertEqual(subs['activeEffectiveSubscriptions'], 1)
+        self.assertEqual(subs['totalSubscriptionRecords'], 1)
+
+    def test_future_subscription_not_counted_as_effective(self):
+        user = make_user('sub_future')
+        UserSubscription.objects.create(
+            user=user, plan=self.gold,
+            start_date=self.today + timedelta(days=10),
+            end_date=self.today + timedelta(days=40),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        subs = self._get().data['subscriptions']
+        self.assertEqual(subs['activeEffectiveSubscriptions'], 0)
+        self.assertEqual(subs['expiredSubscriptions'], 0)
+        self.assertEqual(subs['futureScheduledSubscriptions'], 1)
+
+    def test_expired_subscription_not_counted_as_effective(self):
+        user = make_user('sub_expired')
+        UserSubscription.objects.create(
+            user=user, plan=self.silver,
+            start_date=self.today - timedelta(days=40),
+            end_date=self.today - timedelta(days=10),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        subs = self._get().data['subscriptions']
+        self.assertEqual(subs['activeEffectiveSubscriptions'], 0)
+        self.assertEqual(subs['expiredSubscriptions'], 1)
+
+    def test_expired_subscription_counted_even_if_status_not_lazily_flipped_yet(self):
+        user = make_user('sub_stale')
+        sub = UserSubscription.objects.create(
+            user=user, plan=self.silver,
+            start_date=self.today - timedelta(days=40),
+            end_date=self.today - timedelta(days=10),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        subs = self._get().data['subscriptions']
+        sub.refresh_from_db()
+        self.assertEqual(sub.status, UserSubscription.Status.ACTIVE)  # never lazily touched
+        self.assertEqual(subs['expiredSubscriptions'], 1)
+        self.assertEqual(subs['activeEffectiveSubscriptions'], 0)
+
+    def test_cancelled_subscription_counted_correctly(self):
+        user = make_user('sub_cancelled')
+        UserSubscription.objects.create(
+            user=user, plan=self.silver,
+            start_date=self.today - timedelta(days=5),
+            end_date=self.today + timedelta(days=25),
+            status=UserSubscription.Status.CANCELLED,
+        )
+        subs = self._get().data['subscriptions']
+        self.assertEqual(subs['cancelledSubscriptions'], 1)
+        self.assertEqual(subs['activeEffectiveSubscriptions'], 0)
+        self.assertEqual(subs['expiredSubscriptions'], 0)
+
+    def test_subscriptions_by_plan_only_counts_currently_effective(self):
+        u1, u2 = make_user('sub_byplan_1'), make_user('sub_byplan_2')
+        UserSubscription.objects.create(
+            user=u1, plan=self.silver,
+            start_date=self.today, end_date=self.today + timedelta(days=30),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        UserSubscription.objects.create(
+            user=u2, plan=self.gold,
+            start_date=self.today + timedelta(days=10), end_date=self.today + timedelta(days=40),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        by_plan = {
+            row['tier']: row['count']
+            for row in self._get().data['subscriptions']['subscriptionsByPlan']
+        }
+        self.assertEqual(by_plan.get('silver'), 1)
+        self.assertNotIn('gold', by_plan)
+
+    def test_recent_subscriptions_ordering_is_deterministic(self):
+        user = make_user('sub_recent')
+        UserSubscription.objects.create(
+            user=user, plan=self.silver,
+            start_date=self.today, end_date=self.today + timedelta(days=30),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        newer = UserSubscription.objects.create(
+            user=user, plan=self.gold,
+            start_date=self.today + timedelta(days=30), end_date=self.today + timedelta(days=60),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        ids = [item['id'] for item in self._get().data['subscriptions']['recentSubscriptions']]
+        self.assertEqual(ids[0], newer.id)
+
+    # --- plan distribution -------------------------------------------------
+
+    def test_basic_fallback_users_counted_without_usersubscription_row(self):
+        make_user('dist_basic_1')
+        make_user('dist_basic_2')
+        dist = self._get().data['planDistribution']
+        self.assertEqual(dist['basicUsers'], 2)
+        self.assertEqual(dist['silverUsers'], 0)
+        self.assertEqual(dist['goldUsers'], 0)
+        self.assertEqual(dist['totalUsers'], 2)
+
+    def test_effective_silver_and_gold_users_counted_correctly(self):
+        silver_user = make_user('dist_silver')
+        services.activate_subscription(silver_user, self.silver, 1)
+        gold_user = make_user('dist_gold')
+        services.activate_subscription(gold_user, self.gold, 1)
+        basic_user = make_user('dist_basic')
+
+        dist = self._get().data['planDistribution']
+        self.assertEqual(dist['silverUsers'], 1)
+        self.assertEqual(dist['goldUsers'], 1)
+        self.assertEqual(dist['basicUsers'], 1)
+        self.assertEqual(dist['totalUsers'], 3)
+
+    def test_expired_subscriber_falls_back_to_basic_in_distribution(self):
+        user = make_user('dist_expired')
+        UserSubscription.objects.create(
+            user=user, plan=self.gold,
+            start_date=self.today - timedelta(days=40), end_date=self.today - timedelta(days=10),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        dist = self._get().data['planDistribution']
+        self.assertEqual(dist['goldUsers'], 0)
+        self.assertEqual(dist['basicUsers'], 1)
+
+    def test_future_subscriber_still_counted_as_basic_until_start_date(self):
+        user = make_user('dist_future')
+        UserSubscription.objects.create(
+            user=user, plan=self.gold,
+            start_date=self.today + timedelta(days=10), end_date=self.today + timedelta(days=40),
+            status=UserSubscription.Status.ACTIVE,
+        )
+        dist = self._get().data['planDistribution']
+        self.assertEqual(dist['goldUsers'], 0)
+        self.assertEqual(dist['basicUsers'], 1)
+
+    def test_staff_roles_excluded_from_plan_distribution(self):
+        make_user('dist_listener', role=User.Role.LISTENER)
+        make_user('dist_artist', role=User.Role.ARTIST)
+        make_user('dist_support', role=User.Role.SUPPORT)
+        make_user('dist_admin2', role=User.Role.ADMIN)
+
+        dist = self._get().data['planDistribution']
+        self.assertEqual(dist['totalUsers'], 2)
+
+    # --- response shape -----------------------------------------------
+
+    def test_response_contains_all_three_sections(self):
+        response = self._get()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('planDistribution', response.data)
+        self.assertIn('subscriptions', response.data)
+        self.assertIn('finance', response.data)

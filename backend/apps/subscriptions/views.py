@@ -1,3 +1,4 @@
+from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Case, IntegerField, Value, When
 from django.http import Http404
@@ -8,7 +9,7 @@ from rest_framework.views import APIView
 
 from apps.users.models import User
 
-from . import payment, services
+from . import payment, reports, services
 from .models import SubscriptionPlan, Transaction, UserSubscription
 from .serializers import (
     CurrentSubscriptionSerializer,
@@ -155,3 +156,29 @@ class VerifyTransactionView(APIView):
                 'effectiveSubscription': _effective_subscription_payload(txn.user),
             }
         )
+
+
+class ReportsOverviewView(APIView):
+    """
+    GET-only staff dashboard: real, database-backed plan distribution,
+    subscription summary, and financial summary — see reports.py for the
+    aggregation itself.
+
+    Authorization caveat (documented, not hidden): this project has no
+    authentication system, so "only admins can see this" cannot be a real
+    security boundary here. This endpoint follows the same explicit-id
+    convention already used everywhere else in this API (userId identifies
+    who's asking) and checks that user's `role`, exactly mirroring the
+    frontend's own isStaff()/isAdmin() gate on StaffSubscriptionsPage. Any
+    client that supplies a real admin's id can pass this check — it is not
+    protection against a malicious client, only a convention-consistent
+    gate matching the rest of this unauthenticated API.
+    """
+
+    def get(self, request):
+        user_id = _parse_required_int(request.query_params.get('userId'), 'userId')
+        requester = get_object_or_404(User, pk=user_id)
+        if requester.role != User.Role.ADMIN:
+            raise PermissionDenied('Only admin accounts can view subscription reports.')
+
+        return Response(reports.get_reports_overview())
