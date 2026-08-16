@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.common.fields import AbsoluteImageField
+from apps.common.uploads import validate_audio_file, validate_image_file
 from apps.users.models import User
 
 from .models import Album, Track
@@ -8,45 +10,33 @@ from .models import Album, Track
 def parse_collaborators(value):
     if value is None:
         return []
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return []
+        try:
+            import json
+
+            return parse_collaborators(json.loads(raw))
+        except json.JSONDecodeError:
+            return [
+                part.strip()
+                for part in raw.replace('،', ',').split(',')
+                if part.strip()
+            ]
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
-    return [
-        part.strip()
-        for part in str(value).replace('،', ',').split(',')
-        if part.strip()
-    ]
+    text = str(value).strip()
+    return [text] if text else []
 
 
-def default_cover(prefix, object_id):
-    return f'https://picsum.photos/seed/sepatify-{prefix}-{object_id}/400/400'
-
-
-class AudioField(serializers.Field):
-    def get_attribute(self, instance):
-        return instance
-
-    def to_representation(self, track):
-        if not track.audio_name:
-            return None
-        return {
-            'name': track.audio_name,
-            'size': track.audio_size,
-            'type': track.audio_type,
-        }
-
-    def to_internal_value(self, data):
-        if data is None:
-            return None
-        if not isinstance(data, dict):
-            raise serializers.ValidationError('audio must be an object.')
-        name = str(data.get('name') or '').strip()
-        if not name:
-            raise serializers.ValidationError('audio.name is required.')
-        return {
-            'audio_name': name,
-            'audio_size': int(data.get('size') or 0),
-            'audio_type': str(data.get('type') or ''),
-        }
+def media_url(file_field, request):
+    if not file_field:
+        return ''
+    url = file_field.url
+    if request is not None:
+        return request.build_absolute_uri(url)
+    return url
 
 
 class AlbumSerializer(serializers.ModelSerializer):
@@ -57,6 +47,7 @@ class AlbumSerializer(serializers.ModelSerializer):
     artistName = serializers.SerializerMethodField()
     releasedAt = serializers.DateField(source='released_at')
     earlyAccess = serializers.BooleanField(source='early_access', required=False, default=False)
+    cover = AbsoluteImageField(required=False, allow_null=True, validators=[validate_image_file])
     trackIds = serializers.SerializerMethodField()
 
     class Meta:
@@ -97,13 +88,6 @@ class AlbumSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('genre is required.')
         return genre
 
-    def create(self, validated_data):
-        album = Album.objects.create(**validated_data)
-        if not album.cover:
-            album.cover = default_cover('album', album.id)
-            album.save(update_fields=['cover'])
-        return album
-
 
 class TrackSerializer(serializers.ModelSerializer):
     artistId = serializers.PrimaryKeyRelatedField(
@@ -120,9 +104,17 @@ class TrackSerializer(serializers.ModelSerializer):
     )
     releasedAt = serializers.DateField(source='released_at')
     earlyAccess = serializers.BooleanField(source='early_access', required=False, default=False)
-    audioUrl = serializers.URLField(source='audio_url', required=False, allow_blank=True, default='')
-    audio = AudioField(required=False, allow_null=True)
+    cover = AbsoluteImageField(required=False, allow_null=True, validators=[validate_image_file])
     coverImage = serializers.SerializerMethodField()
+    audio = serializers.SerializerMethodField()
+    audioFile = serializers.FileField(
+        source='audio_file',
+        required=False,
+        allow_null=True,
+        write_only=True,
+        validators=[validate_audio_file],
+    )
+    audioUrl = serializers.SerializerMethodField()
 
     class Meta:
         model = Track
@@ -142,15 +134,41 @@ class TrackSerializer(serializers.ModelSerializer):
             'collaborators',
             'lyrics',
             'audio',
+            'audioFile',
             'audioUrl',
         )
-        read_only_fields = ('id', 'plays', 'listeners', 'artistName', 'coverImage')
+        read_only_fields = (
+            'id',
+            'plays',
+            'listeners',
+            'artistName',
+            'coverImage',
+            'audio',
+            'audioUrl',
+        )
 
     def get_artistName(self, obj):
         return obj.artist.public_artist_name
 
     def get_coverImage(self, obj):
-        return obj.cover
+        return media_url(obj.cover, self.context.get('request'))
+
+    def get_audio(self, obj):
+        if not obj.audio_name and not obj.audio_file:
+            return None
+        name = obj.audio_name
+        if not name and obj.audio_file:
+            name = obj.audio_file.name.rsplit('/', 1)[-1]
+        return {
+            'name': name,
+            'size': obj.audio_size or getattr(obj.audio_file, 'size', 0) or 0,
+            'type': obj.audio_type or '',
+        }
+
+    def get_audioUrl(self, obj):
+        if obj.audio_file:
+            return media_url(obj.audio_file, self.context.get('request'))
+        return obj.external_audio_url or ''
 
     def validate_collaborators(self, value):
         return parse_collaborators(value)
@@ -183,44 +201,31 @@ class TrackSerializer(serializers.ModelSerializer):
                     {'albumId': 'Album must belong to the same artist.'}
                 )
 
-        audio = attrs.get('audio', serializers.empty)
-        if self.instance is None and (audio is serializers.empty or not audio):
-            raise serializers.ValidationError({'audio': 'audio is required.'})
-        if audio is None and 'audio' in getattr(self, 'initial_data', {}):
-            raise serializers.ValidationError({'audio': 'audio is required.'})
+        audio_file = attrs.get('audio_file', serializers.empty)
+        if self.instance is None and (audio_file is serializers.empty or not audio_file):
+            raise serializers.ValidationError({'audioFile': 'audioFile is required.'})
 
         return attrs
 
-    def _apply_audio(self, validated_data):
-        audio = validated_data.pop('audio', serializers.empty)
-        if audio is serializers.empty:
-            return validated_data
-        if audio is None:
-            validated_data.update(
-                {
-                    'audio_name': '',
-                    'audio_size': 0,
-                    'audio_type': '',
-                }
-            )
-        else:
-            validated_data.update(audio)
-        return validated_data
-
     def create(self, validated_data):
-        validated_data = self._apply_audio(validated_data)
-        track = Track.objects.create(**validated_data)
-        if not track.cover:
-            if track.album_id and track.album.cover:
-                track.cover = track.album.cover
-            else:
-                track.cover = default_cover('track', track.id)
-            track.save(update_fields=['cover'])
+        audio = validated_data.get('audio_file')
+        track = Track(**validated_data)
+        if audio:
+            track.audio_name = getattr(audio, 'name', '') or ''
+            track.audio_size = getattr(audio, 'size', 0) or 0
+            track.audio_type = getattr(audio, 'content_type', '') or ''
+        if not track.cover and track.album_id and track.album.cover:
+            track.cover = track.album.cover
+        track.save()
         return track
 
     def update(self, instance, validated_data):
-        validated_data = self._apply_audio(validated_data)
+        audio = validated_data.get('audio_file', serializers.empty)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        if audio is not serializers.empty and audio:
+            instance.audio_name = getattr(audio, 'name', '') or ''
+            instance.audio_size = getattr(audio, 'size', 0) or 0
+            instance.audio_type = getattr(audio, 'content_type', '') or ''
         instance.save()
         return instance

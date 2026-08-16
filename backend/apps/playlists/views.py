@@ -1,5 +1,6 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from .models import Playlist, PlaylistTrack
@@ -9,6 +10,7 @@ from .serializers import PlaylistSerializer, PlaylistTrackWriteSerializer
 class PlaylistViewSet(viewsets.ModelViewSet):
     queryset = Playlist.objects.select_related('owner').prefetch_related('playlist_tracks')
     serializer_class = PlaylistSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
@@ -27,7 +29,10 @@ class PlaylistViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(PlaylistSerializer(playlist).data, status=status.HTTP_201_CREATED)
+        return Response(
+            PlaylistSerializer(playlist, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(
         detail=True,
@@ -45,4 +50,6 @@ class PlaylistViewSet(viewsets.ModelViewSet):
                 {'detail': 'Track not found in this playlist.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        return Response(PlaylistSerializer(playlist).data)
+        return Response(
+            PlaylistSerializer(playlist, context=self.get_serializer_context()).data,
+        )
