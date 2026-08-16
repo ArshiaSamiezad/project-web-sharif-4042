@@ -16,6 +16,7 @@ AUDIO_CONTENT_TYPES = {
     'audio/mp3',
     'audio/wav',
     'audio/x-wav',
+    'audio/wave',
     'audio/flac',
     'audio/x-flac',
 }
