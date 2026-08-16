@@ -13,6 +13,8 @@ from django.db import transaction
 
 from apps.catalog.models import Album, Track
 from apps.playlists.models import Playlist, PlaylistTrack
+from apps.subscriptions import services as subscription_services
+from apps.subscriptions.models import SubscriptionPlan, Transaction, UserSubscription
 from apps.users.models import User
 
 
@@ -838,11 +840,19 @@ class Command(BaseCommand):
         covers = CoverFetcher(self.stdout, self.style)
 
         with transaction.atomic():
+            # Transaction/UserSubscription rows PROTECT their User FK, so
+            # they must be cleared before User.objects.all().delete() below
+            # — otherwise a rerun after this command has granted demo Gold
+            # subscriptions (see below) would fail with a ProtectedError.
+            Transaction.objects.all().delete()
+            UserSubscription.objects.all().delete()
             PlaylistTrack.objects.all().delete()
             Playlist.objects.all().delete()
             Track.objects.all().delete()
             Album.objects.all().delete()
             User.objects.all().delete()
+
+            gold_plan = SubscriptionPlan.objects.get(tier=SubscriptionPlan.Tier.GOLD)
 
             listener = User.objects.create(
                 email='listener@sepatify.test',
@@ -856,8 +866,15 @@ class Command(BaseCommand):
                 display_name='کاربر طلایی',
                 username='user_gold',
                 role=User.Role.LISTENER,
-                subscription=User.Subscription.GOLD,
             )
+            # Grant a real effective Gold subscription through the actual
+            # service layer (not just the convenience User.subscription
+            # field) so this showcase account is genuinely Gold under
+            # get_effective_plan() / playlist limits / avatar upload /
+            # early-access filtering / reports — activate_subscription()
+            # also syncs User.subscription as a side effect.
+            subscription_services.activate_subscription(gold, gold_plan, 12)
+
             artist = User.objects.create(
                 email='artist@sepatify.test',
                 display_name='هنرمند نمونه',
@@ -977,8 +994,10 @@ class Command(BaseCommand):
                     role=User.Role.ARTIST,
                     artist_name=entry['name'],
                     status=User.Status.APPROVED,
-                    subscription=User.Subscription.GOLD,
                 )
+                # Same reasoning as the `gold` listener above: a real
+                # effective subscription, not just the convenience field.
+                subscription_services.activate_subscription(rapper, gold_plan, 12)
                 for album_data in entry['albums']:
                     album = Album.objects.create(
                         title=album_data['title'],

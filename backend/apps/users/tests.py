@@ -83,3 +83,39 @@ class ProfilePhotoUploadAccessTests(APITestCase):
 
         serializer = UserSerializer(user, data={'avatar': None}, partial=True)
         self.assertTrue(serializer.is_valid(), serializer.errors)
+
+
+class AvatarUploadOnCreateTests(APITestCase):
+    """
+    Regression coverage: POST /api/users/ (added alongside get-or-create-by-
+    email support) must not let a brand-new user bypass the Basic-tier
+    avatar restriction just because validate_avatar previously only checked
+    self.instance is not None (which is always None during creation).
+    """
+
+    def test_new_user_cannot_bypass_avatar_restriction_via_create(self):
+        response = self.client.post(
+            reverse('user-list'),
+            {
+                'email': 'new_basic_avatar@example.com',
+                'displayName': 'New Basic',
+                'username': 'new_basic_avatar',
+                'avatar': make_avatar_file(),
+            },
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(username='new_basic_avatar').exists())
+
+    def test_new_user_creation_without_avatar_still_works(self):
+        response = self.client.post(
+            reverse('user-list'),
+            {
+                'email': 'new_basic_noavatar@example.com',
+                'displayName': 'New Basic',
+                'username': 'new_basic_noavatar',
+            },
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(User.objects.filter(username='new_basic_noavatar').exists())

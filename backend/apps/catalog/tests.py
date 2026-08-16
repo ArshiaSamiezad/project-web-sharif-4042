@@ -1,7 +1,9 @@
 import io
 from datetime import date
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
 from PIL import Image
@@ -10,7 +12,7 @@ from rest_framework.test import APITestCase
 
 from apps.playlists.models import Playlist, PlaylistTrack
 from apps.subscriptions import services as subscription_services
-from apps.subscriptions.models import SubscriptionPlan
+from apps.subscriptions.models import SubscriptionPlan, UserSubscription
 from apps.users.models import User
 
 from .models import Album, Track
@@ -371,3 +373,73 @@ class BackendFeatureTests(APITestCase):
         detail = self.client.get(f'/api/albums/{album_id}/')
         self.assertEqual(detail.status_code, status.HTTP_200_OK)
         self.assertEqual(detail.data['trackIds'], [track_res.data['id']])
+
+
+class SeedDemoCommandTests(APITestCase):
+    """
+    Regression coverage for the seed_demo Gold-showcase-account fix: these
+    accounts must have a real effective Gold subscription (via
+    services.activate_subscription), not just the User.subscription
+    convenience field set directly with no backing UserSubscription row.
+    """
+
+    def setUp(self):
+        from pathlib import Path
+        import tempfile
+
+        self._media = tempfile.TemporaryDirectory()
+        self.override = override_settings(MEDIA_ROOT=Path(self._media.name))
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(self._media.cleanup)
+
+    def _run_seed(self):
+        # CoverFetcher.attach() hits the real network (iTunes) — patched
+        # out so this test is fast and doesn't depend on internet access.
+        with patch(
+            'apps.catalog.management.commands.seed_demo.CoverFetcher.attach',
+            return_value=False,
+        ):
+            call_command('seed_demo', verbosity=0)
+
+    def test_gold_showcase_listener_has_effective_gold_plan(self):
+        self._run_seed()
+        gold_user = User.objects.get(username='user_gold')
+        self.assertEqual(
+            subscription_services.get_effective_plan(gold_user).tier,
+            SubscriptionPlan.Tier.GOLD,
+        )
+        gold_user.refresh_from_db()
+        self.assertEqual(gold_user.subscription, User.Subscription.GOLD)
+
+    def test_hip_hop_catalog_artist_has_effective_gold_plan(self):
+        self._run_seed()
+        rapper = User.objects.get(username='drake')
+        self.assertEqual(
+            subscription_services.get_effective_plan(rapper).tier,
+            SubscriptionPlan.Tier.GOLD,
+        )
+        rapper.refresh_from_db()
+        self.assertEqual(rapper.subscription, User.Subscription.GOLD)
+
+    def test_non_gold_demo_accounts_remain_basic(self):
+        self._run_seed()
+        listener = User.objects.get(username='user_listen')
+        self.assertEqual(
+            subscription_services.get_effective_plan(listener).tier,
+            SubscriptionPlan.Tier.BASIC,
+        )
+
+    def test_rerunning_seed_is_idempotent_and_does_not_error(self):
+        self._run_seed()
+        self._run_seed()  # must not raise ProtectedError, must not duplicate
+
+        gold_user = User.objects.get(username='user_gold')
+        self.assertEqual(UserSubscription.objects.filter(user=gold_user).count(), 1)
+        self.assertEqual(
+            subscription_services.get_effective_plan(gold_user).tier,
+            SubscriptionPlan.Tier.GOLD,
+        )
+
+        rapper = User.objects.get(username='drake')
+        self.assertEqual(UserSubscription.objects.filter(user=rapper).count(), 1)

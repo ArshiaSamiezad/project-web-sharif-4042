@@ -44,6 +44,13 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_avatar(self, value):
         # Only gate an actual new upload — submitting avatar=null to remove
         # a photo, or not submitting avatar at all, is never restricted.
-        if value and self.instance is not None:
+        if not value:
+            return value
+        if self.instance is not None:
             access.ensure_profile_photo_upload_allowed(self.instance)
+        else:
+            # POST /api/users/ (create): no persisted user yet to resolve a
+            # plan for. A brand-new user has no UserSubscription row by
+            # definition, so their effective plan is always Basic.
+            access.ensure_new_user_profile_photo_upload_allowed()
         return value

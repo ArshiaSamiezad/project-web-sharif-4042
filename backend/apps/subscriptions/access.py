@@ -20,7 +20,7 @@ attach to yet and were intentionally left unintegrated.
 """
 from django.core.exceptions import PermissionDenied
 
-from .services import get_effective_plan
+from .services import get_basic_plan, get_effective_plan
 
 
 def get_user_effective_plan(user):
@@ -39,6 +39,21 @@ def ensure_profile_photo_upload_allowed(user):
     """Raises PermissionDenied if `user`'s plan does not include profile photo uploads."""
     plan = get_effective_plan(user)
     if not plan.can_upload_profile_photo:
+        raise PermissionDenied(
+            'Your current subscription plan does not allow profile photo uploads.'
+        )
+
+
+def ensure_new_user_profile_photo_upload_allowed():
+    """
+    Same gate as ensure_profile_photo_upload_allowed(), for the one case
+    with no persisted user yet to resolve an effective plan for (creating a
+    new User). A not-yet-existing user can't have any UserSubscription row,
+    so their effective plan is unconditionally Basic — checked against the
+    real Basic plan (not a hardcoded flag) so a future change to Basic's
+    capabilities is still respected here too.
+    """
+    if not get_basic_plan().can_upload_profile_photo:
         raise PermissionDenied(
             'Your current subscription plan does not allow profile photo uploads.'
         )

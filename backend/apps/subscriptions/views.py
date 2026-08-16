@@ -36,10 +36,6 @@ def _parse_required_int(raw_value, field_name):
         raise serializers.ValidationError({field_name: f'{field_name} must be a valid integer.'})
 
 
-def _parse_user_id(raw_user_id):
-    return _parse_required_int(raw_user_id, 'userId')
-
-
 def _effective_subscription_payload(user):
     subscription = services.get_effective_subscription(user)
     plan = subscription.plan if subscription is not None else services.get_basic_plan()
@@ -70,7 +66,7 @@ class SubscriptionPlanListView(generics.ListAPIView):
 
 class CurrentSubscriptionView(APIView):
     def get(self, request):
-        user_id = _parse_user_id(request.query_params.get('userId'))
+        user_id = _parse_required_int(request.query_params.get('userId'), 'userId')
         user = get_object_or_404(User, pk=user_id)
 
         subscription = services.get_effective_subscription(user)
@@ -88,7 +84,7 @@ class SubscriptionHistoryView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        user_id = _parse_user_id(self.request.query_params.get('userId'))
+        user_id = _parse_required_int(self.request.query_params.get('userId'), 'userId')
         get_object_or_404(User, pk=user_id)
         return (
             UserSubscription.objects.filter(user_id=user_id)
