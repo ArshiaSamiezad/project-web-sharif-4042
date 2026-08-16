@@ -64,6 +64,7 @@ export default function ArtistWorksPage() {
     releaseYear: String(new Date().getFullYear()),
     collaborators: '',
     cover: '',
+    coverFile: null,
     coverName: '',
     earlyAccess: false,
     lyrics: '',
@@ -134,6 +135,7 @@ export default function ArtistWorksPage() {
       releaseYear: String(new Date().getFullYear()),
       collaborators: '',
       cover: '',
+      coverFile: null,
       coverName: '',
       earlyAccess: false,
       lyrics: '',
@@ -149,11 +151,11 @@ export default function ArtistWorksPage() {
       setCreateError(t('errors.worksCoverFormat'))
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      patchForm({ cover: String(reader.result), coverName: file.name })
-    }
-    reader.readAsDataURL(file)
+    patchForm({
+      cover: URL.createObjectURL(file),
+      coverFile: file,
+      coverName: file.name,
+    })
   }
 
   function handleAudioFile(file) {
@@ -162,7 +164,7 @@ export default function ArtistWorksPage() {
       setCreateError(t('errors.worksAudioFormat'))
       return
     }
-    patchForm({ audio: fileMeta(file) })
+    patchForm({ audio: file })
   }
 
   function patchTrackRow(key, patch) {
@@ -179,7 +181,7 @@ export default function ArtistWorksPage() {
       setCreateError(t('errors.worksAudioFormat'))
       return
     }
-    patchTrackRow(key, { audio: fileMeta(file) })
+    patchTrackRow(key, { audio: file })
   }
 
   async function handlePublish(event) {
@@ -191,7 +193,8 @@ export default function ArtistWorksPage() {
       genre: form.genre,
       releaseYear: form.releaseYear,
       collaborators: isAlbum ? '' : form.collaborators,
-      cover: form.cover,
+      cover: form.coverFile || null,
+      coverFile: form.coverFile || null,
       earlyAccess: form.earlyAccess,
       lyrics: form.lyrics,
       audio: form.audio,

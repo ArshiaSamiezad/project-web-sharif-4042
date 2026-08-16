@@ -1,6 +1,7 @@
 from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from .models import Album, Track
@@ -10,6 +11,7 @@ from .serializers import AlbumSerializer, TrackSerializer
 class AlbumViewSet(viewsets.ModelViewSet):
     queryset = Album.objects.select_related('artist').prefetch_related('tracks')
     serializer_class = AlbumSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
@@ -26,24 +28,30 @@ class AlbumViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='tracks')
     def add_track(self, request, pk=None):
         album = self.get_object()
-        payload = request.data.copy()
-        payload['albumId'] = album.id
-        payload.setdefault('artistId', album.artist_id)
-        payload.setdefault('releasedAt', album.released_at.isoformat())
-        payload.setdefault('genre', album.genre)
-        payload.setdefault('earlyAccess', album.early_access)
-        payload.setdefault('cover', album.cover)
+        data = request.data.copy()
+        data['albumId'] = album.id
+        data['artistId'] = album.artist_id
+        if 'releasedAt' not in data:
+            data['releasedAt'] = album.released_at.isoformat()
+        if 'genre' not in data:
+            data['genre'] = album.genre
+        if 'earlyAccess' not in data:
+            data['earlyAccess'] = album.early_access
 
-        serializer = TrackSerializer(data=payload)
+        serializer = TrackSerializer(data=data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
             track = serializer.save()
-        return Response(TrackSerializer(track).data, status=status.HTTP_201_CREATED)
+        return Response(
+            TrackSerializer(track, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class TrackViewSet(viewsets.ModelViewSet):
     queryset = Track.objects.select_related('artist', 'album')
     serializer_class = TrackSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):

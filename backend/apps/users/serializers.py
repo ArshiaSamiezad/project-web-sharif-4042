@@ -1,11 +1,15 @@
 from rest_framework import serializers
 
+from apps.common.fields import AbsoluteImageField
+from apps.common.uploads import validate_image_file
+
 from .models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
-    displayName = serializers.CharField(source='display_name')
-    artistName = serializers.CharField(source='artist_name')
+    displayName = serializers.CharField(source='display_name', required=False)
+    artistName = serializers.CharField(source='artist_name', required=False, allow_blank=True)
+    avatar = AbsoluteImageField(required=False, allow_null=True, validators=[validate_image_file])
 
     class Meta:
         model = User
@@ -18,5 +22,15 @@ class UserSerializer(serializers.ModelSerializer):
             'artistName',
             'status',
             'subscription',
+            'avatar',
         )
-        read_only_fields = fields
+        read_only_fields = (
+            'id',
+            'email',
+            'displayName',
+            'username',
+            'role',
+            'artistName',
+            'status',
+            'subscription',
+        )

@@ -268,7 +268,7 @@ export function AuthProvider({ children }) {
     )
   }
 
-  function updateUser(userId, patch) {
+  async function updateUser(userId, patch) {
     const users = getUsers()
 
     if (patch.username !== undefined) {
@@ -288,6 +288,17 @@ export function AuthProvider({ children }) {
           ...(existing?.settings || {}),
           ...patch.settings,
         },
+      }
+    }
+
+    if (patch.avatar instanceof File) {
+      try {
+        const maps = getUserMaps()
+        const apiId = toApiUserId(userId, maps)
+        const remote = await catalogApi.updateUser(apiId, { avatar: patch.avatar })
+        patch = { ...patch, avatar: remote.avatar || null }
+      } catch (error) {
+        return apiFailure(error, t('errors.settingsLoginRequired'))
       }
     }
 
@@ -573,14 +584,38 @@ export function AuthProvider({ children }) {
   }
 
   function normalizeAudio(audio) {
-    if (!audio || typeof audio !== 'object') return null
+    if (!audio) return null
+    if (typeof File !== 'undefined' && audio instanceof File) {
+      return {
+        file: audio,
+        name: audio.name,
+        size: audio.size,
+        type: audio.type,
+      }
+    }
+    if (typeof audio !== 'object') return null
+    if (audio.file instanceof File) {
+      return {
+        file: audio.file,
+        name: audio.file.name,
+        size: audio.file.size,
+        type: audio.file.type,
+      }
+    }
     const name = String(audio.name || '').trim()
     if (!name) return null
     return {
+      file: null,
       name,
       size: Number(audio.size) || 0,
       type: String(audio.type || ''),
     }
+  }
+
+  function pickCoverFile(value) {
+    if (typeof File !== 'undefined' && value instanceof File) return value
+    if (value && typeof value === 'object' && value.file instanceof File) return value.file
+    return null
   }
 
   function estimateRevenue(plays) {
@@ -661,7 +696,7 @@ export function AuthProvider({ children }) {
     const releasedAt = yearToReleasedAt(year)
     const collaborators = parseCollaborators(payload?.collaborators)
     const earlyAccess = Boolean(payload?.earlyAccess)
-    const cover = String(payload?.cover || '').trim()
+    const coverFile = pickCoverFile(payload?.coverFile) || pickCoverFile(payload?.cover)
 
     try {
       const maps = getUserMaps()
@@ -669,22 +704,23 @@ export function AuthProvider({ children }) {
 
       if (releaseType === 'single') {
         const audio = normalizeAudio(payload?.audio)
-        if (!audio) {
+        if (!audio?.file) {
           return { ok: false, error: t('errors.worksAudioRequired') }
         }
 
-        const track = await catalogApi.createTrack({
+        const body = {
           title,
           artistId,
-          albumId: null,
-          cover,
           releasedAt,
           earlyAccess,
           genre,
           collaborators,
           lyrics: payload?.lyrics || '',
-          audio,
-        })
+          audioFile: audio.file,
+        }
+        if (coverFile) body.cover = coverFile
+
+        const track = await catalogApi.createTrack(body)
         await refreshCatalog()
         return { ok: true, kind: 'single', track: mapTrackFromApi(track, getUserMaps()) }
       }
@@ -694,15 +730,17 @@ export function AuthProvider({ children }) {
         return { ok: false, error: t('errors.worksAlbumTracksRequired') }
       }
 
-      const album = await catalogApi.createAlbum({
+      const albumBody = {
         title,
         artistId,
-        cover,
         releasedAt,
         earlyAccess,
         genre,
         collaborators: [],
-      })
+      }
+      if (coverFile) albumBody.cover = coverFile
+
+      const album = await catalogApi.createAlbum(albumBody)
 
       const createdTracks = []
       for (const item of inputTracks) {
@@ -711,13 +749,13 @@ export function AuthProvider({ children }) {
           return { ok: false, error: t('errors.worksTrackTitleRequired') }
         }
         const audio = normalizeAudio(item?.audio)
-        if (!audio) {
+        if (!audio?.file) {
           return { ok: false, error: t('errors.worksAudioRequired') }
         }
         const track = await catalogApi.addTrackToAlbum(album.id, {
           title: trackTitle,
           lyrics: item?.lyrics || '',
-          audio,
+          audioFile: audio.file,
           collaborators: parseCollaborators(item?.collaborators),
         })
         createdTracks.push(mapTrackFromApi(track, getUserMaps()))
@@ -763,7 +801,8 @@ export function AuthProvider({ children }) {
       body.releasedAt = yearToReleasedAt(year)
     }
     if (patch.cover != null) {
-      body.cover = String(patch.cover).trim() || album.cover
+      const coverFile = pickCoverFile(patch.coverFile) || pickCoverFile(patch.cover)
+      if (coverFile) body.cover = coverFile
     }
     if (patch.earlyAccess != null) {
       body.earlyAccess = Boolean(patch.earlyAccess)
@@ -831,11 +870,12 @@ export function AuthProvider({ children }) {
     }
     if (patch.audio != null) {
       const audio = normalizeAudio(patch.audio)
-      if (!audio) return { ok: false, error: t('errors.worksAudioRequired') }
-      body.audio = audio
+      if (!audio?.file) return { ok: false, error: t('errors.worksAudioRequired') }
+      body.audioFile = audio.file
     }
     if (patch.cover != null) {
-      body.cover = String(patch.cover).trim() || track.cover
+      const coverFile = pickCoverFile(patch.coverFile) || pickCoverFile(patch.cover)
+      if (coverFile) body.cover = coverFile
     }
     if (patch.earlyAccess != null) {
       body.earlyAccess = Boolean(patch.earlyAccess)
@@ -882,7 +922,7 @@ export function AuthProvider({ children }) {
       return { ok: false, error: t('errors.worksTrackTitleRequired') }
     }
     const audio = normalizeAudio(payload?.audio)
-    if (!audio) {
+    if (!audio?.file) {
       return { ok: false, error: t('errors.worksAudioRequired') }
     }
 
@@ -890,7 +930,7 @@ export function AuthProvider({ children }) {
       const track = await catalogApi.addTrackToAlbum(albumId, {
         title,
         lyrics: payload?.lyrics || '',
-        audio,
+        audioFile: audio.file,
         collaborators: parseCollaborators(payload?.collaborators),
       })
       await refreshCatalog()

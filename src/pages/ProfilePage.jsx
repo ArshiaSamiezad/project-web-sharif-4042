@@ -222,21 +222,20 @@ export default function ProfilePage() {
     setDraft({})
   }
 
-  function handleAvatarFile(file) {
+  async function handleAvatarFile(file) {
     if (!file) return
     if (!canChangeAvatar(currentUser.subscription)) {
       setError(t('profile.avatarBlocked'))
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (!applyUpdate(updateUser(liveProfile.id, { avatar: String(reader.result) }))) {
-        return
-      }
-      setMessage(t('profile.saved'))
-      setEditing(null)
+    const result = await updateUser(liveProfile.id, { avatar: file })
+    if (!result.ok) {
+      setError(result.error)
+      return
     }
-    reader.readAsDataURL(file)
+    refresh()
+    setMessage(t('profile.saved'))
+    setEditing(null)
   }
 
   function handleFollow() {

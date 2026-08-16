@@ -21,12 +21,58 @@ function extractErrorMessage(payload, fallback) {
   return fallback
 }
 
-async function request(path, { method = 'GET', body, signal } = {}) {
+function isPlainObject(value) {
+  return Boolean(value) && Object.getPrototypeOf(value) === Object.prototype
+}
+
+export function toFormData(payload = {}) {
+  const formData = new FormData()
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return
+    if (value instanceof File || value instanceof Blob) {
+      formData.append(key, value)
+      return
+    }
+    if (Array.isArray(value) || isPlainObject(value)) {
+      formData.append(key, JSON.stringify(value))
+      return
+    }
+    if (typeof value === 'boolean') {
+      formData.append(key, value ? 'true' : 'false')
+      return
+    }
+    formData.append(key, String(value))
+  })
+  return formData
+}
+
+function hasBinary(payload) {
+  if (!payload || typeof payload !== 'object') return false
+  return Object.values(payload).some(
+    (value) => value instanceof File || value instanceof Blob,
+  )
+}
+
+async function request(path, { method = 'GET', body, signal, formData } = {}) {
+  const headers = {}
+  let requestBody = undefined
+
+  if (formData) {
+    requestBody = formData
+  } else if (body !== undefined) {
+    if (hasBinary(body)) {
+      requestBody = toFormData(body)
+    } else {
+      headers['Content-Type'] = 'application/json'
+      requestBody = JSON.stringify(body)
+    }
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     signal,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
+    headers,
+    body: requestBody,
   })
 
   if (response.status === 204) return null
@@ -72,6 +118,8 @@ async function listAll(path) {
 
 export const catalogApi = {
   listUsers: () => request('/users/'),
+  updateUser: (id, payload) => request(`/users/${id}/`, { method: 'PATCH', body: payload }),
+
   listAlbums: (params = {}) => {
     const query = new URLSearchParams(params).toString()
     return listAll(`/albums/${query ? `?${query}` : ''}`)

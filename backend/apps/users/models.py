@@ -1,5 +1,7 @@
 from django.db import models
 
+from apps.common.uploads import user_avatar_upload_to, validate_image_file
+
 
 class User(models.Model):
     class Role(models.TextChoices):
@@ -28,6 +30,12 @@ class User(models.Model):
         max_length=20,
         choices=Subscription.choices,
         default=Subscription.BASIC,
+    )
+    avatar = models.ImageField(
+        upload_to=user_avatar_upload_to,
+        blank=True,
+        null=True,
+        validators=[validate_image_file],
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

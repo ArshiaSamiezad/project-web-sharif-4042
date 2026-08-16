@@ -3,7 +3,8 @@ from django.db.models import Max
 from rest_framework import serializers
 
 from apps.catalog.models import Track
-from apps.catalog.serializers import default_cover
+from apps.common.fields import AbsoluteImageField
+from apps.common.uploads import validate_image_file
 from apps.users.models import User
 
 from .models import Playlist, PlaylistTrack
@@ -14,6 +15,7 @@ class PlaylistSerializer(serializers.ModelSerializer):
         source='owner',
         queryset=User.objects.all(),
     )
+    cover = AbsoluteImageField(required=False, allow_null=True, validators=[validate_image_file])
     trackIds = serializers.SerializerMethodField()
 
     class Meta:
@@ -36,13 +38,6 @@ class PlaylistSerializer(serializers.ModelSerializer):
         if not title:
             raise serializers.ValidationError('title is required.')
         return title
-
-    def create(self, validated_data):
-        playlist = Playlist.objects.create(**validated_data)
-        if not playlist.cover:
-            playlist.cover = default_cover('playlist', playlist.id)
-            playlist.save(update_fields=['cover'])
-        return playlist
 
 
 class PlaylistTrackWriteSerializer(serializers.Serializer):
