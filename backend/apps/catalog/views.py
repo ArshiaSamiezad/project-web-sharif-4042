@@ -4,8 +4,39 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.subscriptions import access
+from apps.users.models import User
+
 from .models import Album, Track
 from .serializers import AlbumSerializer, TrackSerializer
+
+
+def _apply_early_access_filter(queryset, request):
+    """
+    Optional viewer-scoped filtering, mirroring the project's existing
+    explicit-id convention (ownerId/artistId): pass ?userId=<id> to have
+    early-access items excluded when that user's effective plan doesn't
+    include early access.
+
+    Fails open (no filtering) when userId is absent, malformed, or doesn't
+    match a real user — this endpoint had no viewer-identification concept
+    before Phase 6, so existing callers that never send userId keep today's
+    fully-public behavior unchanged.
+    """
+    raw_user_id = request.query_params.get('userId')
+    if not raw_user_id:
+        return queryset
+    try:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        return queryset
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        return queryset
+    plan = access.get_user_effective_plan(user)
+    if plan.has_early_access:
+        return queryset
+    return queryset.filter(early_access=False)
 
 
 class AlbumViewSet(viewsets.ModelViewSet):
@@ -19,6 +50,7 @@ class AlbumViewSet(viewsets.ModelViewSet):
         artist_id = self.request.query_params.get('artistId')
         if artist_id:
             queryset = queryset.filter(artist_id=artist_id)
+        queryset = _apply_early_access_filter(queryset, self.request)
         return queryset
 
     def perform_destroy(self, instance):
@@ -68,4 +100,5 @@ class TrackViewSet(viewsets.ModelViewSet):
             flag = str(single).lower() in {'1', 'true', 'yes'}
             queryset = queryset.filter(album__isnull=flag)
 
+        queryset = _apply_early_access_filter(queryset, self.request)
         return queryset

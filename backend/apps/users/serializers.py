@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from apps.common.fields import AbsoluteImageField
 from apps.common.uploads import validate_image_file
+from apps.subscriptions import access
 
 from .models import User
 
@@ -34,3 +35,10 @@ class UserSerializer(serializers.ModelSerializer):
             'status',
             'subscription',
         )
+
+    def validate_avatar(self, value):
+        # Only gate an actual new upload — submitting avatar=null to remove
+        # a photo, or not submitting avatar at all, is never restricted.
+        if value and self.instance is not None:
+            access.ensure_profile_photo_upload_allowed(self.instance)
+        return value
