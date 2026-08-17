@@ -15,19 +15,35 @@ from . import payment, services
 from .models import SubscriptionPlan, Transaction, UserSubscription
 
 
-class FakeProvider:
-    """Test-only provider: deterministic success/failure, injected directly
-    into payment.verify_transaction() so tests don't need to reach into a
-    real (or the development-mock) provider's internals."""
+class FakeGateway:
+    """
+    Test-only gateway for simulating outcomes the always-succeeds
+    DevelopmentMockGateway can't: a failed/rejected gateway verification
+    (what a real gateway reports for a cancelled or amount-mismatched
+    payment) and a gateway that's unreachable at initiate() time. Injected
+    by patching get_payment_provider — like DevelopmentMockGateway, never
+    touches the network, so "happy path" tests don't need this at all (the
+    real mock gateway is already deterministic and network-free).
+    """
 
-    def __init__(self, success):
+    name = 'fake-test'
+
+    def __init__(self, success=True, raise_on_initiate=False):
         self._success = success
+        self._raise_on_initiate = raise_on_initiate
 
     def initiate(self, txn):
-        return payment.PaymentInitiationResult(reference_id='FAKE-REF', provider='fake-test', mock=True)
+        if self._raise_on_initiate:
+            raise payment.PaymentGatewayError('simulated gateway outage')
+        return payment.PaymentInitiationResult(
+            authority=f'FAKE-AUTH-{txn.pk}',
+            payment_url=f'https://fake-gateway.test/pay/{txn.pk}',
+            provider=self.name,
+            mock=True,
+        )
 
     def verify(self, txn):
-        return payment.PaymentVerificationResult(success=self._success)
+        return payment.PaymentVerificationResult(success=self._success, ref_id='FAKE-REF')
 
 
 def make_user(suffix, role=User.Role.LISTENER):
@@ -347,6 +363,13 @@ class SubscriptionHistoryAPITests(PlanMixin, APITestCase):
 
 
 class PurchaseAPITests(PlanMixin, APITestCase):
+    """
+    POST /subscriptions/purchase/ only ever creates a Pending Transaction
+    plus a gateway paymentUrl — it must never grant anything by itself.
+    Uses the default (mock-mode) provider throughout: DevelopmentMockGateway
+    makes no network calls, so these need no patching.
+    """
+
     def test_purchase_creates_pending_transaction_with_correct_snapshot(self):
         user = make_user('purchase_pending')
         response = self.client.post(
@@ -362,8 +385,36 @@ class PurchaseAPITests(PlanMixin, APITestCase):
         self.assertEqual(txn.plan_tier_snapshot, SubscriptionPlan.Tier.SILVER)
         self.assertEqual(txn.duration_months, 3)
         self.assertEqual(response.data['transaction']['transactionId'], txn.id)
-        self.assertTrue(response.data['payment']['mock'])
+        self.assertTrue(response.data['mock'])
+        self.assertTrue(response.data['paymentUrl'])
+        self.assertTrue(txn.gateway_reference_id)
         self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+    def test_purchase_never_grants_the_subscription_itself(self):
+        # The core rule this whole flow exists to enforce: purchase alone
+        # must never make the plan effective, regardless of response shape.
+        user = make_user('purchase_no_grant')
+        self.client.post(
+            reverse('subscription-purchase'),
+            {'userId': user.id, 'planId': self.gold.id, 'durationMonths': 1},
+            format='json',
+        )
+        self.assertEqual(services.get_effective_plan(user).tier, SubscriptionPlan.Tier.BASIC)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+    def test_gateway_request_failure_leaves_no_transaction(self):
+        user = make_user('purchase_gateway_down')
+        with patch(
+            'apps.subscriptions.payment.get_payment_provider',
+            return_value=FakeGateway(raise_on_initiate=True),
+        ):
+            response = self.client.post(
+                reverse('subscription-purchase'),
+                {'userId': user.id, 'planId': self.silver.id, 'durationMonths': 1},
+                format='json',
+            )
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(Transaction.objects.filter(user=user).count(), 0)
 
     def test_price_snapshot_survives_later_plan_price_change(self):
         user = make_user('purchase_snapshot')
@@ -434,22 +485,48 @@ class PurchaseAPITests(PlanMixin, APITestCase):
         self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
 
 
-class VerifyTransactionAPITests(PlanMixin, APITestCase):
+class PaymentCallbackAPITests(PlanMixin, APITestCase):
+    """
+    GET /subscriptions/payments/callback/ is the ONLY path that can ever
+    grant a subscription. It is never called by purchaseSubscription()
+    directly — these tests simulate exactly what a gateway redirect (real
+    or the local mock-gateway page) would hit, with Authority/Status query
+    params, not an internal transactionId a client could pick.
+    """
+
     def _purchase(self, user, plan, months):
         response = self.client.post(
             reverse('subscription-purchase'),
             {'userId': user.id, 'planId': plan.id, 'durationMonths': months},
             format='json',
         )
-        return response.data['transaction']['transactionId']
+        txn_id = response.data['transaction']['transactionId']
+        authority = Transaction.objects.get(pk=txn_id).gateway_reference_id
+        return txn_id, authority
 
-    def test_successful_verification_activates_subscription(self):
-        user = make_user('verify_success')
-        txn_id = self._purchase(user, self.silver, 1)
+    def _callback(self, authority, gateway_status='OK', gateway=None):
+        # gateway=None: use the real default (mock-mode) provider as-is —
+        # DevelopmentMockGateway.verify() deterministically succeeds and
+        # touches no network, so "happy path" callback tests need no patch.
+        if gateway is None:
+            return self.client.get(
+                reverse('subscription-payment-callback'),
+                {'Authority': authority, 'Status': gateway_status},
+            )
+        with patch('apps.subscriptions.payment.get_payment_provider', return_value=gateway):
+            return self.client.get(
+                reverse('subscription-payment-callback'),
+                {'Authority': authority, 'Status': gateway_status},
+            )
 
-        response = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['transaction']['status'], Transaction.Status.SUCCESS)
+    def test_successful_callback_activates_subscription(self):
+        user = make_user('callback_success')
+        txn_id, authority = self._purchase(user, self.silver, 1)
+
+        response = self._callback(authority, 'OK')
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertIn('status=success', response.url)
+        self.assertIn(f'transactionId={txn_id}', response.url)
 
         txn = Transaction.objects.get(pk=txn_id)
         self.assertEqual(txn.status, Transaction.Status.SUCCESS)
@@ -460,14 +537,24 @@ class VerifyTransactionAPITests(PlanMixin, APITestCase):
         user.refresh_from_db()
         self.assertEqual(user.subscription, User.Subscription.SILVER)
 
-    def test_failed_verification_does_not_activate(self):
-        user = make_user('verify_fail')
-        txn_id = self._purchase(user, self.silver, 1)
+    def test_subscription_not_granted_before_callback(self):
+        user = make_user('callback_pending_not_granted')
+        self._purchase(user, self.gold, 1)
 
-        with patch('apps.subscriptions.payment.get_payment_provider', return_value=FakeProvider(success=False)):
-            response = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+        self.assertEqual(services.get_effective_plan(user).tier, SubscriptionPlan.Tier.BASIC)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_gateway_verification_failure_marks_transaction_failed(self):
+        # Models what a real gateway reports for e.g. an amount mismatch or
+        # any other server-side rejection — our code treats every such
+        # rejection identically: Failed, nothing granted.
+        user = make_user('callback_gateway_rejects')
+        txn_id, authority = self._purchase(user, self.silver, 1)
+
+        response = self._callback(authority, 'OK', gateway=FakeGateway(success=False))
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertIn('status=failed', response.url)
+
         txn = Transaction.objects.get(pk=txn_id)
         self.assertEqual(txn.status, Transaction.Status.FAILED)
         self.assertIsNotNone(txn.verified_at)
@@ -477,40 +564,82 @@ class VerifyTransactionAPITests(PlanMixin, APITestCase):
         user.refresh_from_db()
         self.assertEqual(user.subscription, User.Subscription.BASIC)
 
-    def test_idempotent_double_verification_creates_one_subscription(self):
-        user = make_user('verify_idempotent')
-        txn_id = self._purchase(user, self.gold, 1)
+    def test_user_cancelled_marks_transaction_failed_without_calling_gateway(self):
+        user = make_user('callback_cancelled')
+        txn_id, authority = self._purchase(user, self.silver, 1)
 
-        self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
-        self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+        # A gateway that would raise if verify() were called at all — proves
+        # the NOK path short-circuits before ever contacting the gateway.
+        class ExplodingGateway(FakeGateway):
+            def verify(self, txn):
+                raise AssertionError('verify() must not be called for a cancelled payment')
+
+        response = self._callback(authority, 'NOK', gateway=ExplodingGateway())
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertIn('status=failed', response.url)
+
+        txn = Transaction.objects.get(pk=txn_id)
+        self.assertEqual(txn.status, Transaction.Status.FAILED)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+    def test_duplicate_callback_creates_only_one_subscription(self):
+        user = make_user('callback_idempotent')
+        txn_id, authority = self._purchase(user, self.gold, 1)
+
+        self._callback(authority, 'OK')
+        self._callback(authority, 'OK')
 
         self.assertEqual(UserSubscription.objects.filter(user=user).count(), 1)
 
-    def test_already_successful_transaction_returns_existing_result(self):
-        user = make_user('verify_already_success')
-        txn_id = self._purchase(user, self.gold, 1)
+    def test_duplicate_callback_after_failure_stays_failed(self):
+        user = make_user('callback_duplicate_failed')
+        txn_id, authority = self._purchase(user, self.silver, 1)
 
-        first = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
-        second = self.client.post(reverse('subscription-verify'), {'transactionId': txn_id}, format='json')
+        self._callback(authority, 'NOK')
+        self._callback(authority, 'OK', gateway=FakeGateway(success=True))
 
-        self.assertEqual(
-            first.data['transaction']['userSubscription']['id'],
-            second.data['transaction']['userSubscription']['id'],
+        txn = Transaction.objects.get(pk=txn_id)
+        self.assertEqual(txn.status, Transaction.Status.FAILED)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 0)
+
+    def test_already_successful_transaction_is_not_reprocessed(self):
+        user = make_user('callback_already_success')
+        txn_id, authority = self._purchase(user, self.gold, 1)
+
+        self._callback(authority, 'OK')
+        first_subscription_id = Transaction.objects.get(pk=txn_id).user_subscription_id
+
+        self._callback(authority, 'OK')
+        second_subscription_id = Transaction.objects.get(pk=txn_id).user_subscription_id
+
+        self.assertEqual(first_subscription_id, second_subscription_id)
+        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 1)
+
+    def test_callback_with_unknown_authority_redirects_as_failed(self):
+        # No transactionId is ever accepted here — only a gateway-issued
+        # authority. An unrecognized one (forged, stale, or simply wrong)
+        # can never be resolved to any user's transaction.
+        response = self.client.get(
+            reverse('subscription-payment-callback'),
+            {'Authority': 'NEVER-ISSUED-BY-US', 'Status': 'OK'},
         )
-        self.assertEqual(UserSubscription.objects.filter(user=user).count(), 1)
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertIn('status=failed', response.url)
+        self.assertIn('reason=not_found', response.url)
 
-    def test_verify_nonexistent_transaction_returns_404(self):
-        response = self.client.post(reverse('subscription-verify'), {'transactionId': 999999}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    def test_missing_authority_redirects_as_failed(self):
+        response = self.client.get(reverse('subscription-payment-callback'), {'Status': 'OK'})
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertIn('status=failed', response.url)
 
     def test_renewal_through_payment_schedules_after_existing_period(self):
-        user = make_user('verify_renewal')
-        first_txn_id = self._purchase(user, self.silver, 1)
-        self.client.post(reverse('subscription-verify'), {'transactionId': first_txn_id}, format='json')
+        user = make_user('callback_renewal')
+        first_txn_id, first_authority = self._purchase(user, self.silver, 1)
+        self._callback(first_authority, 'OK')
         first_sub = UserSubscription.objects.get(user=user)
 
-        second_txn_id = self._purchase(user, self.silver, 1)
-        self.client.post(reverse('subscription-verify'), {'transactionId': second_txn_id}, format='json')
+        second_txn_id, second_authority = self._purchase(user, self.silver, 1)
+        self._callback(second_authority, 'OK')
 
         subs = list(UserSubscription.objects.filter(user=user).order_by('start_date'))
         self.assertEqual(len(subs), 2)
@@ -518,26 +647,26 @@ class VerifyTransactionAPITests(PlanMixin, APITestCase):
         self.assertLessEqual(subs[0].end_date, subs[1].start_date)
 
     def test_plan_change_through_payment_schedules_after_latest_period(self):
-        user = make_user('verify_plan_change')
-        silver_txn_id = self._purchase(user, self.silver, 1)
-        self.client.post(reverse('subscription-verify'), {'transactionId': silver_txn_id}, format='json')
+        user = make_user('callback_plan_change')
+        silver_txn_id, silver_authority = self._purchase(user, self.silver, 1)
+        self._callback(silver_authority, 'OK')
         silver_sub = UserSubscription.objects.get(user=user, plan=self.silver)
 
-        gold_txn_id = self._purchase(user, self.gold, 3)
-        self.client.post(reverse('subscription-verify'), {'transactionId': gold_txn_id}, format='json')
+        gold_txn_id, gold_authority = self._purchase(user, self.gold, 3)
+        self._callback(gold_authority, 'OK')
         gold_sub = UserSubscription.objects.get(user=user, plan=self.gold)
 
         self.assertEqual(gold_sub.start_date, silver_sub.end_date)
 
 
-class VerifyTransactionAtomicityTests(PlanMixin, TestCase):
+class PaymentCallbackAtomicityTests(PlanMixin, TestCase):
     def test_activation_failure_leaves_transaction_pending_with_no_orphan_subscription(self):
-        user = make_user('verify_atomic')
+        user = make_user('callback_atomic')
         txn, _initiation = payment.create_pending_transaction(user, self.silver, 1)
 
         with patch('apps.subscriptions.payment.activate_subscription', side_effect=RuntimeError('boom')):
             with self.assertRaises(RuntimeError):
-                payment.verify_transaction(txn.id)
+                payment.handle_payment_callback(txn.gateway_reference_id, 'OK')
 
         txn.refresh_from_db()
         self.assertEqual(txn.status, Transaction.Status.PENDING)

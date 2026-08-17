@@ -1421,42 +1421,42 @@ export function AuthProvider({ children }) {
         planId,
         durationMonths,
       })
-      return { ok: true, transaction: result.transaction, payment: result.payment }
+      // Intentionally stops here: no verify/activation call. The backend
+      // only ever grants the subscription from its own gateway callback,
+      // reached by redirecting the browser to result.paymentUrl — never by
+      // this frontend calling anything on its own. See PaymentResultPage.
+      return {
+        ok: true,
+        transaction: result.transaction,
+        paymentUrl: result.paymentUrl,
+        provider: result.provider,
+        mock: result.mock,
+      }
     } catch (error) {
       return apiFailure(error, t('errors.purchaseFailed'))
     }
   }
 
-  async function verifySubscriptionTransaction(transactionId) {
-    try {
-      const result = await subscriptionApi.verify(transactionId)
-
-      // The backend keeps the authenticated account's own subscription
-      // field synced (services.sync_user_subscription_tier), so re-pulling
-      // the session user is enough to bring currentUser.subscription
-      // in line with the just-verified purchase — no client-side merge.
-      if (backend.hasSession()) {
-        try {
-          const [user, preferences] = await Promise.all([
-            backend.api('/auth/me/'),
-            backend.api('/auth/preferences/'),
-          ])
-          setSession(user, preferences)
-        } catch {
-          // Non-fatal: currentSubscription refresh below still reflects
-          // the real backend state even if the session-user refresh fails.
-        }
+  // Called from PaymentResultPage once the browser is redirected back from
+  // the gateway (via our backend's callback, which already independently
+  // verified and — only on real success — activated the subscription
+  // server-side). This never decides success/failure itself; it only
+  // re-pulls state that the backend has already updated, so the UI catches
+  // up with what actually happened.
+  async function refreshAfterPaymentResult() {
+    if (backend.hasSession()) {
+      try {
+        const [user, preferences] = await Promise.all([
+          backend.api('/auth/me/'),
+          backend.api('/auth/preferences/'),
+        ])
+        setSession(user, preferences)
+      } catch {
+        // Non-fatal: the refreshes below still reflect real backend state
+        // even if the session-user refetch itself fails.
       }
-
-      await Promise.all([refreshCurrentSubscription(currentUser), refreshCatalog(currentUser)])
-      return {
-        ok: true,
-        transaction: result.transaction,
-        effectiveSubscription: result.effectiveSubscription,
-      }
-    } catch (error) {
-      return apiFailure(error, t('errors.verificationFailed'))
     }
+    await Promise.all([refreshCurrentSubscription(currentUser), refreshCatalog(currentUser)])
   }
 
   async function getSubscriptionReportsOverview() {
@@ -1518,7 +1518,7 @@ export function AuthProvider({ children }) {
     getSubscriptionPlans,
     getSubscriptionHistory,
     purchaseSubscription,
-    verifySubscriptionTransaction,
+    refreshAfterPaymentResult,
     getSubscriptionReportsOverview,
     getUserById,
     getUserByUsername,

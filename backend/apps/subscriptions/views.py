@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Case, IntegerField, Value, When
-from django.http import Http404
-from django.shortcuts import get_object_or_404
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect
 from rest_framework import generics, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -34,14 +35,6 @@ def _parse_required_int(raw_value, field_name):
         return int(raw_value)
     except (TypeError, ValueError):
         raise serializers.ValidationError({field_name: f'{field_name} must be a valid integer.'})
-
-
-def _effective_subscription_payload(user):
-    subscription = services.get_effective_subscription(user)
-    plan = subscription.plan if subscription is not None else services.get_basic_plan()
-    return CurrentSubscriptionSerializer(
-        {'user': user, 'plan': plan, 'subscription': subscription}
-    ).data
 
 
 class SubscriptionPlanListView(generics.ListAPIView):
@@ -95,9 +88,12 @@ class SubscriptionHistoryView(generics.ListAPIView):
 
 class PurchaseView(APIView):
     """
-    POST userId/planId/durationMonths -> creates a Pending Transaction and
-    asks the (development/mock) payment provider to initiate payment. Never
-    activates a subscription directly — see payment.create_pending_transaction.
+    POST userId/planId/durationMonths -> creates a Pending Transaction,
+    asks the active payment gateway to initiate payment, and returns a
+    paymentUrl for the browser to be redirected to. Never activates a
+    subscription directly, and there is no endpoint the frontend can call
+    to activate one itself — only a gateway-confirmed callback can (see
+    PaymentCallbackView). See payment.create_pending_transaction.
     """
 
     def post(self, request):
@@ -112,46 +108,88 @@ class PurchaseView(APIView):
             txn, initiation = payment.create_pending_transaction(user, plan, duration_months)
         except DjangoValidationError as exc:
             raise serializers.ValidationError({'detail': exc.messages})
+        except payment.PaymentGatewayError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
         return Response(
             {
                 'transaction': TransactionSerializer(txn).data,
-                'payment': {
-                    'provider': initiation.provider,
-                    'mock': initiation.mock,
-                    'referenceId': initiation.reference_id,
-                    'message': (
-                        'Development/mock payment flow — no real charge occurs. '
-                        'Call /api/subscriptions/verify/ with this transactionId to complete it.'
-                    ),
-                },
+                'paymentUrl': initiation.payment_url,
+                'provider': initiation.provider,
+                'mock': initiation.mock,
             },
             status=status.HTTP_201_CREATED,
         )
 
 
-class VerifyTransactionView(APIView):
+class PaymentCallbackView(APIView):
     """
-    POST transactionId -> verifies the Transaction and, only on success,
-    activates the subscription (via the existing Phase 3 service, reached
-    through payment.verify_transaction). Idempotent — see that function's
-    docstring for exactly how repeated calls are handled.
+    GET-only, gateway-facing — the gateway redirects the user's browser
+    here after they complete or cancel payment. This is NOT an endpoint our
+    own frontend JS ever calls directly; it is the only path that can mark
+    a Transaction Success and grant a subscription (see
+    payment.handle_payment_callback for the actual verification/activation
+    logic — this view is just query-param parsing + the final redirect).
+
+    Always ends by redirecting the browser to FRONTEND_PAYMENT_RESULT_URL
+    with the outcome — never returns JSON, since the party hitting this URL
+    is a browser being navigated by the gateway, not our API client.
     """
 
-    def post(self, request):
-        transaction_id = _parse_required_int(request.data.get('transactionId'), 'transactionId')
+    def get(self, request):
+        authority = request.query_params.get('Authority', '')
+        gateway_status = request.query_params.get('Status', '')
+
+        if not authority:
+            return redirect(f'{settings.FRONTEND_PAYMENT_RESULT_URL}?status=failed&reason=missing_authority')
 
         try:
-            txn = payment.verify_transaction(transaction_id)
+            txn = payment.handle_payment_callback(authority, gateway_status)
         except Transaction.DoesNotExist:
-            raise Http404('Transaction not found.')
+            return redirect(f'{settings.FRONTEND_PAYMENT_RESULT_URL}?status=failed&reason=not_found')
+        except payment.PaymentGatewayError:
+            return redirect(f'{settings.FRONTEND_PAYMENT_RESULT_URL}?status=failed&reason=gateway_error')
 
-        return Response(
-            {
-                'transaction': TransactionSerializer(txn).data,
-                'effectiveSubscription': _effective_subscription_payload(txn.user),
-            }
+        outcome = 'success' if txn.status == Transaction.Status.SUCCESS else 'failed'
+        return redirect(
+            f'{settings.FRONTEND_PAYMENT_RESULT_URL}?status={outcome}&transactionId={txn.pk}'
         )
+
+
+class MockGatewayPageView(APIView):
+    """
+    Stand-in for a real gateway's hosted checkout page — only reachable
+    when PAYMENT_GATEWAY_PROVIDER=mock. Lets a developer manually exercise
+    the full redirect-away-and-back flow locally with no real gateway
+    credentials: the browser genuinely leaves our React app, lands here,
+    and clicking a link redirects back to PaymentCallbackView with
+    ?Status=OK/NOK — the same shape a real gateway redirect has. Never
+    reachable when a real gateway is configured (see the guard below).
+    """
+
+    def get(self, request):
+        if getattr(settings, 'PAYMENT_GATEWAY_PROVIDER', 'mock') != 'mock':
+            raise Http404('The mock gateway page is only available in mock mode.')
+
+        authority = request.query_params.get('authority', '')
+        callback = request.query_params.get('callback', '')
+        pay_url = f'{callback}?Authority={authority}&Status=OK'
+        cancel_url = f'{callback}?Authority={authority}&Status=NOK'
+        html = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Development Payment Gateway</title></head>
+<body style="font-family:sans-serif;max-width:420px;margin:80px auto;text-align:center">
+<h2>Development Payment Gateway</h2>
+<p><strong>This is not a real payment gateway.</strong> It only exists
+because PAYMENT_GATEWAY_PROVIDER=mock — no real gateway is configured.</p>
+<p>Authority: <code>{authority}</code></p>
+<p><a href="{pay_url}" style="display:inline-block;margin:8px;padding:10px 20px;
+background:#2a2;color:#fff;text-decoration:none;border-radius:6px;">
+Simulate Successful Payment</a></p>
+<p><a href="{cancel_url}" style="display:inline-block;margin:8px;padding:10px 20px;
+background:#a22;color:#fff;text-decoration:none;border-radius:6px;">
+Simulate Cancel</a></p>
+</body></html>"""
+        return HttpResponse(html)
 
 
 class ReportsOverviewView(APIView):

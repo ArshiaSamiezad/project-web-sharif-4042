@@ -164,3 +164,31 @@ EMAIL_BACKEND = os.getenv(
 FRONTEND_RESET_URL = os.getenv(
     "FRONTEND_RESET_URL", "http://localhost:5173/reset-password"
 )
+
+# --- Payment gateway -------------------------------------------------------
+# "mock" (default) is a deterministic, no-network stand-in for local dev and
+# automated tests — see apps/subscriptions/payment.py. Set to "zarinpal" to
+# use the real gateway; ZARINPAL_MERCHANT_ID then becomes required.
+PAYMENT_GATEWAY_PROVIDER = os.getenv("PAYMENT_GATEWAY_PROVIDER", "mock").strip().lower()
+ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()
+# ZarinPal sandbox (sandbox.zarinpal.com) vs production (payment.zarinpal.com).
+# Defaults to sandbox so an accidental unset var never points at real money.
+ZARINPAL_SANDBOX = os.getenv("ZARINPAL_SANDBOX", "1") == "1"
+# Where the gateway redirects the user's browser back to after payment.
+# Must be a publicly reachable URL when using the real gateway (ZarinPal
+# cannot reach 127.0.0.1) — for local manual testing with the mock
+# provider, the default below works as-is.
+PAYMENT_CALLBACK_URL = os.getenv(
+    "PAYMENT_CALLBACK_URL", "http://127.0.0.1:8000/api/subscriptions/payments/callback/"
+)
+# Only ever used by DevelopmentMockGateway (mock mode) — a same-server page
+# standing in for a real gateway's hosted checkout page, so the redirect
+# flow is exercised for real in local dev too, not faked by the frontend.
+PAYMENT_MOCK_GATEWAY_URL = os.getenv(
+    "PAYMENT_MOCK_GATEWAY_URL", "http://127.0.0.1:8000/api/subscriptions/payments/mock-gateway/"
+)
+# Frontend page that displays the final payment outcome; the callback view
+# redirects here (never returns JSON directly to the gateway/browser).
+FRONTEND_PAYMENT_RESULT_URL = os.getenv(
+    "FRONTEND_PAYMENT_RESULT_URL", "http://localhost:5173/payment/result"
+)

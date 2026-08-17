@@ -16,6 +16,7 @@ import CatalogPage from './pages/CatalogPage'
 import AlbumPage from './pages/AlbumPage'
 import SettingsPage from './pages/SettingsPage'
 import PaymentPage from './pages/PaymentPage'
+import PaymentResultPage from './pages/PaymentResultPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ArtistWorksPage from './pages/ArtistWorksPage'
 import ArtistWorkDetailPage from './pages/ArtistWorkDetailPage'
@@ -85,6 +86,7 @@ export default function App() {
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/payment" element={<PaymentPage />} />
+                <Route path="/payment/result" element={<PaymentResultPage />} />
               </Route>
               <Route path="/" element={<Navigate to="/home" replace />} />
               <Route path="*" element={<Navigate to="/home" replace />} />

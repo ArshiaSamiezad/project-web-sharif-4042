@@ -18,7 +18,6 @@ export default function PaymentPage() {
     getSubscriptionPlans,
     getSubscriptionHistory,
     purchaseSubscription,
-    verifySubscriptionTransaction,
   } = useAuth()
   const { t, formatNumber, subscriptionLabel } = useI18n()
 
@@ -29,7 +28,6 @@ export default function PaymentPage() {
   const [selectedDuration, setSelectedDuration] = useState({})
   const [purchasingPlanId, setPurchasingPlanId] = useState(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -71,27 +69,23 @@ export default function PaymentPage() {
   async function handlePurchase(plan) {
     if (purchasingPlanId) return
     setError('')
-    setNotice('')
     setPurchasingPlanId(plan.id)
     try {
       const duration = durationFor(plan.id)
-      const purchaseResult = await purchaseSubscription(plan.id, duration)
-      if (!purchaseResult.ok) {
-        setError(purchaseResult.error)
+      const result = await purchaseSubscription(plan.id, duration)
+      if (!result.ok) {
+        setError(result.error)
         return
       }
-      // Development/mock provider only — see the disclosure rendered below.
-      // Real money never moves; this immediately calls the existing verify
-      // endpoint the same way a gateway callback would.
-      const verifyResult = await verifySubscriptionTransaction(
-        purchaseResult.transaction.transactionId,
-      )
-      if (!verifyResult.ok) {
-        setError(verifyResult.error)
+      // The subscription is not active yet — it only becomes active once
+      // the gateway redirects back and the backend verifies the payment
+      // server-side (see PaymentResultPage). Leaving this page now is
+      // expected; there is nothing left for the frontend to do itself.
+      if (result.paymentUrl) {
+        window.location.href = result.paymentUrl
         return
       }
-      setNotice(t('payment.purchaseSuccess'))
-      setHistory((await getSubscriptionHistory()) || [])
+      setError(t('errors.purchaseFailed'))
     } catch (err) {
       setError(err.message || t('errors.purchaseFailed'))
     } finally {
@@ -108,7 +102,6 @@ export default function PaymentPage() {
         </div>
       </header>
 
-      {notice ? <p className="settings__ok">{notice}</p> : null}
       {error ? <p className="settings__error">{error}</p> : null}
       {loadError ? <p className="settings__error">{loadError}</p> : null}
 
@@ -140,7 +133,7 @@ export default function PaymentPage() {
           <div className="settings__card-head">
             <h2>{t('payment.plansTitle')}</h2>
           </div>
-          <p className="settings__note">{t('payment.mockNotice')}</p>
+          <p className="settings__note">{t('payment.redirectNotice')}</p>
           <div className="settings__stats" style={{ display: 'grid', gap: '1rem' }}>
             {plans.map((plan) => {
               const isCurrent = currentSubscription?.tier === plan.tier
