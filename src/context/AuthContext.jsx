@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import * as storage from '../lib/storage'
-import { catalogApi, ApiError } from '../lib/api'
+import { catalogApi, subscriptionApi, ApiError } from '../lib/api'
 import {
   buildUserIdMaps,
   mapAlbumFromApi,
@@ -9,7 +9,7 @@ import {
   toApiUserId,
 } from '../lib/catalogMap'
 import { idEq, yearToReleasedAt } from '../lib/ids'
-import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS, DEFAULT_SUBSCRIPTION_PRICES } from '../data/seed'
+import { ensureSeedData, DEFAULT_AVATAR, PLAYLIST_LIMITS } from '../data/seed'
 import {
   validateArtistSignup,
   validateListenerSignup,
@@ -17,7 +17,7 @@ import {
   validatePasswordReset,
 } from '../lib/validation'
 import * as backend from '../lib/api'
-import { formatNumber, t } from '../i18n/translations'
+import { t } from '../i18n/translations'
 
 const AuthContext = createContext(null)
 
@@ -42,6 +42,10 @@ export function AuthProvider({ children }) {
   const [tracks, setTracks] = useState([])
   const [playlists, setPlaylists] = useState([])
   const [apiUsers, setApiUsers] = useState([])
+  // Real effective subscription for currentUser, from GET /subscriptions/current/.
+  // Refreshed on boot/login/logout and after a purchase verifies — the backend
+  // stays the single source of truth; this is just a cache of its last answer.
+  const [currentSubscription, setCurrentSubscription] = useState(null)
 
   function bumpCatalog() {
     setCatalogVersion((n) => n + 1)
@@ -54,21 +58,45 @@ export function AuthProvider({ children }) {
   }
 
   async function refreshCatalog(authUser = currentUser) {
-    const [apiUserList, albumList, trackList, playlistList] = await Promise.all([
-      catalogApi.listUsers(),
-      catalogApi.listAlbums(),
-      catalogApi.listTracks(),
-      catalogApi.listPlaylists(),
-    ])
+    // Users first (not in the same Promise.all as albums/tracks): the
+    // backend only early-access-filters albums/tracks when a resolvable
+    // ?userId= is passed, and resolving the viewer's catalog-side id needs
+    // this list. Early-access enforcement stays entirely backend-side —
+    // this just supplies the id the backend's own filter already expects.
+    const apiUserList = await catalogApi.listUsers()
     const users = Array.isArray(apiUserList) ? apiUserList : []
     const localUsers = storage.getItem('users', [])
     const usersForMapping = authUser ? [...localUsers, authUser] : localUsers
     const maps = buildUserIdMaps(usersForMapping, users)
+    const viewerApiId = authUser ? maps.localToApi.get(String(authUser.id)) : undefined
+    const catalogParams = viewerApiId != null ? { userId: viewerApiId } : {}
+
+    const [albumList, trackList, playlistList] = await Promise.all([
+      catalogApi.listAlbums(catalogParams),
+      catalogApi.listTracks(catalogParams),
+      catalogApi.listPlaylists(),
+    ])
     setApiUsers(users)
     setAlbums((albumList || []).map((item) => mapAlbumFromApi(item, maps)))
     setTracks((trackList || []).map((item) => mapTrackFromApi(item, maps)))
     setPlaylists((playlistList || []).map((item) => mapPlaylistFromApi(item, maps)))
     bumpCatalog()
+  }
+
+  async function refreshCurrentSubscription(authUser = currentUser) {
+    if (!authUser) {
+      setCurrentSubscription(null)
+      return null
+    }
+    try {
+      const apiId = await ensureApiUserId(authUser)
+      const data = await subscriptionApi.getCurrent(apiId)
+      setCurrentSubscription(data)
+      return data
+    } catch {
+      setCurrentSubscription(null)
+      return null
+    }
   }
 
   function apiFailure(error, fallback) {
@@ -144,6 +172,9 @@ export function AuthProvider({ children }) {
           setPlaylists([])
         }
       }
+      if (sessionUser) {
+        await refreshCurrentSubscription(sessionUser)
+      }
       if (!cancelled) setReady(true)
     }
 
@@ -209,6 +240,7 @@ export function AuthProvider({ children }) {
       const preferences = await backend.api('/auth/preferences/')
       const sessionUser = setSession(user, preferences)
       await refreshCatalog(sessionUser)
+      await refreshCurrentSubscription(sessionUser)
       return { ok: true, user: sessionUser }
     } catch (error) {
       return { ok: false, error: error.message || t('errors.invalidCredentials') }
@@ -220,6 +252,7 @@ export function AuthProvider({ children }) {
       await backend.logout()
     } finally {
       setSession(null)
+      setCurrentSubscription(null)
     }
   }
 
@@ -503,6 +536,15 @@ export function AuthProvider({ children }) {
 
   function getPlaylistLimit(user = currentUser) {
     if (!user) return PLAYLIST_LIMITS.basic
+    // Prefer the real backend plan limit for the current user once it's
+    // loaded; the hardcoded map is only a display fallback before that
+    // fetch resolves (or for a user other than currentUser, where we have
+    // no per-user plan data at all). Actual enforcement always happens on
+    // the server — see createPlaylist, which no longer pre-blocks on this.
+    if (idEq(user.id, currentUser?.id) && currentSubscription?.plan) {
+      const backendLimit = currentSubscription.plan.playlistLimit
+      return backendLimit == null ? Infinity : backendLimit
+    }
     return PLAYLIST_LIMITS[user.subscription] ?? PLAYLIST_LIMITS.basic
   }
 
@@ -514,15 +556,6 @@ export function AuthProvider({ children }) {
     const name = String(title ?? '').trim()
     if (!name) {
       return { ok: false, error: t('errors.playlistNameRequired') }
-    }
-
-    const owned = getOwnedPlaylists(currentUser.id)
-    const limit = getPlaylistLimit(currentUser)
-    if (Number.isFinite(limit) && owned.length >= limit) {
-      return {
-        ok: false,
-        error: t('errors.playlistLimit', { limit: formatNumber(limit) }),
-      }
     }
 
     try {
@@ -1355,60 +1388,77 @@ export function AuthProvider({ children }) {
     return { ok: true, payout: next.find((item) => item.id === payoutId) }
   }
 
-  function getSubscriptionPrices() {
-    void catalogVersion
-    return {
-      ...DEFAULT_SUBSCRIPTION_PRICES,
-      ...storage.getItem('subscriptionPrices', DEFAULT_SUBSCRIPTION_PRICES),
+  // Real subscription integration (Phases 1-7 backend). Every function here
+  // either reads directly from the backend or writes through it — none of
+  // them cache pricing/plan/revenue/distribution data in localStorage. The
+  // backend (services.get_effective_plan and friends) remains the only
+  // source of truth for what plan a user actually has.
+
+  async function getSubscriptionPlans() {
+    return subscriptionApi.listPlans()
+  }
+
+  async function getSubscriptionHistory() {
+    if (!currentUser) return []
+    const apiId = await ensureApiUserId(currentUser)
+    return subscriptionApi.getHistory(apiId)
+  }
+
+  async function purchaseSubscription(planId, durationMonths) {
+    if (!currentUser) {
+      return { ok: false, error: t('errors.settingsLoginRequired') }
+    }
+    try {
+      const apiId = await ensureApiUserId(currentUser)
+      const result = await subscriptionApi.purchase({
+        userId: apiId,
+        planId,
+        durationMonths,
+      })
+      return { ok: true, transaction: result.transaction, payment: result.payment }
+    } catch (error) {
+      return apiFailure(error, t('errors.purchaseFailed'))
     }
   }
 
-  function updateSubscriptionPrices({ silver, gold }) {
-    const gate = requireAdmin()
-    if (!gate.ok) return gate
+  async function verifySubscriptionTransaction(transactionId) {
+    try {
+      const result = await subscriptionApi.verify(transactionId)
 
-    const silverPrice = Number(silver)
-    const goldPrice = Number(gold)
-    if (!Number.isFinite(silverPrice) || silverPrice < 0) {
-      return { ok: false, error: t('errors.priceInvalid') }
-    }
-    if (!Number.isFinite(goldPrice) || goldPrice < 0) {
-      return { ok: false, error: t('errors.priceInvalid') }
-    }
+      // The backend keeps the authenticated account's own subscription
+      // field synced (services.sync_user_subscription_tier), so re-pulling
+      // the session user is enough to bring currentUser.subscription
+      // in line with the just-verified purchase — no client-side merge.
+      if (backend.hasSession()) {
+        try {
+          const [user, preferences] = await Promise.all([
+            backend.api('/auth/me/'),
+            backend.api('/auth/preferences/'),
+          ])
+          setSession(user, preferences)
+        } catch {
+          // Non-fatal: currentSubscription refresh below still reflects
+          // the real backend state even if the session-user refresh fails.
+        }
+      }
 
-    const next = {
-      silver: Math.round(silverPrice),
-      gold: Math.round(goldPrice),
-      updatedAt: new Date().toISOString(),
+      await Promise.all([refreshCurrentSubscription(currentUser), refreshCatalog(currentUser)])
+      return {
+        ok: true,
+        transaction: result.transaction,
+        effectiveSubscription: result.effectiveSubscription,
+      }
+    } catch (error) {
+      return apiFailure(error, t('errors.verificationFailed'))
     }
-    storage.setItem('subscriptionPrices', next)
-    bumpCatalog()
-    return { ok: true, prices: next }
   }
 
-  function getSubscriptionStats() {
-    void catalogVersion
-    const users = getUsers().filter(
-      (u) => u.role === 'listener' || u.role === 'artist',
-    )
-    const counts = { basic: 0, silver: 0, gold: 0 }
-    users.forEach((u) => {
-      const plan = u.subscription || 'basic'
-      if (plan === 'silver') counts.silver += 1
-      else if (plan === 'gold') counts.gold += 1
-      else counts.basic += 1
-    })
-
-    const prices = getSubscriptionPrices()
-    const monthlyRevenue =
-      counts.silver * (prices.silver || 0) + counts.gold * (prices.gold || 0)
-
-    return {
-      counts,
-      totalUsers: users.length,
-      monthlyRevenue,
-      prices,
+  async function getSubscriptionReportsOverview() {
+    if (!currentUser) {
+      throw new Error(t('errors.staffLoginRequired'))
     }
+    const apiId = await ensureApiUserId(currentUser)
+    return subscriptionApi.getReportsOverview(apiId)
   }
 
   const value = {
@@ -1457,9 +1507,13 @@ export function AuthProvider({ children }) {
     updateTicketStatus,
     getPayouts,
     settlePayout,
-    getSubscriptionPrices,
-    updateSubscriptionPrices,
-    getSubscriptionStats,
+    currentSubscription,
+    refreshCurrentSubscription,
+    getSubscriptionPlans,
+    getSubscriptionHistory,
+    purchaseSubscription,
+    verifySubscriptionTransaction,
+    getSubscriptionReportsOverview,
     getUserById,
     getUserByUsername,
     getUserMaps,

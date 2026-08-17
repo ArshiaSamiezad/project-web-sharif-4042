@@ -20,17 +20,17 @@ export default function HomePage() {
   const navigate = useNavigate()
   const catalog = getCatalog()
 
-  const isGold = currentUser.subscription === 'gold'
-
   const ownedPlaylists = catalog.playlists.filter((p) => String(p.ownerId) === String(currentUser.id))
   const recentPlaylists = (currentUser.recentPlaylistIds || [])
     .map((id) => catalog.playlists.find((p) => String(p.id) === String(id)))
     .filter((p) => p && String(p.ownerId) === String(currentUser.id))
   const homePlaylists = recentPlaylists.length > 0 ? recentPlaylists : ownedPlaylists
 
-  const latestAlbums = [...catalog.albums]
-    .filter((a) => isGold || !a.earlyAccess)
-    .sort((a, b) => String(b.releasedAt).localeCompare(String(a.releasedAt)))
+  // catalog.albums/tracks are already early-access-filtered for this viewer
+  // by the backend (see AuthContext.refreshCatalog) — no tier check here.
+  const latestAlbums = [...catalog.albums].sort((a, b) =>
+    String(b.releasedAt).localeCompare(String(a.releasedAt)),
+  )
 
   const popularTracks = [...catalog.tracks]
     .filter((track) => !track.earlyAccess)
@@ -168,7 +168,7 @@ export default function HomePage() {
         </TileRow>
       </section>
 
-      {isGold ? (
+      {earlyAccessItems.length > 0 ? (
         <section className="home__section home__section--early">
           <h2>{t('home.earlyAccess')}</h2>
           <TileRow>

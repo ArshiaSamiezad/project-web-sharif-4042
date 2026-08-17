@@ -14,7 +14,7 @@ function matchesQuery(text, query) {
 }
 
 export default function CatalogPage() {
-  const { currentUser, getCatalog, getUserById } = useAuth()
+  const { getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
   const { t, formatNumber, language } = useI18n()
   const navigate = useNavigate()
@@ -23,12 +23,14 @@ export default function CatalogPage() {
   const [query, setQuery] = useState('')
   const [sortBy, setSortBy] = useState('listeners')
 
-  const isGold = currentUser?.subscription === 'gold'
   const normalizedQuery = query.trim().toLowerCase()
 
+  // catalog.albums/tracks already come back early-access-filtered for this
+  // viewer (see AuthContext.refreshCatalog, which passes ?userId= so the
+  // backend's own access.ensure_early_access_allowed-backed filter applies)
+  // — no plan/tier check needed here.
   const items = useMemo(() => {
     const albums = catalog.albums
-      .filter((album) => isGold || !album.earlyAccess)
       .filter((album) => {
         if (!normalizedQuery) return true
         return (
@@ -40,7 +42,6 @@ export default function CatalogPage() {
 
     const singles = catalog.tracks
       .filter((track) => !track.albumId)
-      .filter((track) => isGold || !track.earlyAccess)
       .filter((track) => {
         if (!normalizedQuery) return true
         return (
@@ -62,7 +63,7 @@ export default function CatalogPage() {
     })
 
     return merged
-  }, [catalog.albums, catalog.tracks, isGold, normalizedQuery, sortBy])
+  }, [catalog.albums, catalog.tracks, normalizedQuery, sortBy])
 
   function artistProfilePath(artistId) {
     const user = getUserById(artistId)

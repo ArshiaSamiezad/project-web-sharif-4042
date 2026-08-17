@@ -235,3 +235,18 @@ export const catalogApi = {
   recommendPlaylistTracks: (playlistId) =>
     api(`/playlists/${playlistId}/recommend/`, { method: 'POST' }),
 }
+
+export const subscriptionApi = {
+  listPlans: () => api('/subscriptions/plans/'),
+  getCurrent: (userId) => api(`/subscriptions/current/?userId=${encodeURIComponent(userId)}`),
+  getHistory: (userId) => api(`/subscriptions/history/?userId=${encodeURIComponent(userId)}`),
+  purchase: ({ userId, planId, durationMonths }) =>
+    api('/subscriptions/purchase/', {
+      method: 'POST',
+      body: { userId, planId, durationMonths },
+    }),
+  verify: (transactionId) =>
+    api('/subscriptions/verify/', { method: 'POST', body: { transactionId } }),
+  getReportsOverview: (adminUserId) =>
+    api(`/subscriptions/reports/overview/?userId=${encodeURIComponent(adminUserId)}`),
+}

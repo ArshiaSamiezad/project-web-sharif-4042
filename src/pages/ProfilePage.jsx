@@ -6,10 +6,6 @@ import { useI18n } from '../i18n/I18nProvider'
 import PlayingBars from '../components/PlayingBars'
 import './ProfilePage.css'
 
-function canChangeAvatar(subscription) {
-  return subscription === 'gold' || subscription === 'silver'
-}
-
 export default function ProfilePage() {
   const { username: usernameParam } = useParams()
   const navigate = useNavigate()
@@ -22,6 +18,8 @@ export default function ProfilePage() {
     toggleFollow,
     getCatalog,
     defaultAvatar,
+    currentSubscription,
+    refreshCurrentSubscription,
   } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
   const { t, formatNumber, subscriptionLabel, genderLabel, language } = useI18n()
@@ -46,6 +44,11 @@ export default function ProfilePage() {
     setUsernameError('')
   }, [usernameParam])
 
+  useEffect(() => {
+    if (isOwn) refreshCurrentSubscription()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwn])
+
   if (!profile) {
     return (
       <div className="profile">
@@ -57,23 +60,16 @@ export default function ProfilePage() {
 
   const liveProfile = getUserById(profile.id) || profile
   const isFollowing = currentUser.following?.includes(liveProfile.id)
-  const avatarEditable = isOwn && canChangeAvatar(currentUser.subscription)
   const isArtist = liveProfile.role === 'artist'
   const isVerifiedArtist = isArtist && liveProfile.status === 'approved'
-  const viewerIsGold = currentUser.subscription === 'gold'
   const catalog = getCatalog()
+  // catalog.albums/tracks are already early-access-filtered for this viewer
+  // by the backend (see AuthContext.refreshCatalog) — no tier check here.
   const artistAlbums = isArtist
-    ? catalog.albums.filter(
-        (a) => a.artistId === liveProfile.id && (viewerIsGold || !a.earlyAccess),
-      )
+    ? catalog.albums.filter((a) => a.artistId === liveProfile.id)
     : []
   const artistSingles = isArtist
-    ? catalog.tracks.filter(
-        (track) =>
-          track.artistId === liveProfile.id &&
-          !track.albumId &&
-          (viewerIsGold || !track.earlyAccess),
-      )
+    ? catalog.tracks.filter((track) => track.artistId === liveProfile.id && !track.albumId)
     : []
   const artistTracks = isArtist
     ? catalog.tracks.filter((tr) => tr.artistId === liveProfile.id)
@@ -105,8 +101,6 @@ export default function ProfilePage() {
       })
     } else if (field === 'username') {
       setDraft({ username: liveProfile.username || '' })
-    } else if (field === 'subscription') {
-      setDraft({ subscription: liveProfile.subscription || 'basic' })
     } else if (field === 'dailyStreams') {
       setDraft({ dailyStreams: String(liveProfile.dailyStreams ?? 0) })
     } else if (field === 'avatar') {
@@ -169,13 +163,6 @@ export default function ProfilePage() {
         navigate(`/profile/${username}`, { replace: true })
       }
     }
-    if (editing === 'subscription') {
-      if (!applyUpdate(await updateUser(liveProfile.id, { subscription: draft.subscription }))) {
-        return
-      }
-      setMessage(t('profile.saved'))
-    }
-
     if (editing === 'dailyStreams') {
       const value = Number(draft.dailyStreams)
       if (!Number.isFinite(value) || value < 0) {
@@ -189,10 +176,9 @@ export default function ProfilePage() {
     }
 
     if (editing === 'avatar') {
-      if (!canChangeAvatar(currentUser.subscription)) {
-        setError(t('profile.avatarBlocked'))
-        return
-      }
+      // No client-side plan pre-check: attempt the update and let the
+      // backend's real access.ensure_profile_photo_upload_allowed decide —
+      // applyUpdate surfaces its 403 message via `error` if rejected.
       if (
         !applyUpdate(
           await updateUser(liveProfile.id, {
@@ -224,10 +210,7 @@ export default function ProfilePage() {
 
   async function handleAvatarFile(file) {
     if (!file) return
-    if (!canChangeAvatar(currentUser.subscription)) {
-      setError(t('profile.avatarBlocked'))
-      return
-    }
+    // No client-side plan pre-check here either — same reasoning as above.
     const result = await updateUser(liveProfile.id, { avatar: file })
     if (!result.ok) {
       setError(result.error)
@@ -353,7 +336,9 @@ export default function ProfilePage() {
             )}
           </section>
 
-          {viewerIsGold ? (
+          {/* Cosmetic perk visibility only — real access control for the data
+              itself (early-access catalog content) happens backend-side. */}
+          {(currentSubscription ? currentSubscription.tier === 'gold' : currentUser.subscription === 'gold') ? (
             <section className="profile__card profile__card--gold-stats">
               <div className="profile__card-head">
                 <h2>{t('profile.goldStats')}</h2>
@@ -599,61 +584,50 @@ export default function ProfilePage() {
         </div>
         {editing === 'avatar' ? (
           <form className="profile__form" onSubmit={saveEdit}>
-            {avatarEditable ? (
-              <>
-                <label>
-                  {t('profile.uploadImage')}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleAvatarFile(e.target.files?.[0])}
-                  />
-                </label>
-                <label>
-                  {t('profile.orImageUrl')}
-                  <input
-                    dir="ltr"
-                    placeholder="https://..."
-                    value={draft.avatar}
-                    onChange={(e) => setDraft((d) => ({ ...d, avatar: e.target.value }))}
-                  />
-                </label>
-                <div className="profile__form-actions">
-                  <button type="submit" className="profile__btn">
-                    {t('profile.saveUrl')}
-                  </button>
-                  <button
-                    type="button"
-                    className="profile__btn profile__btn--ghost"
-                    onClick={async () => {
-                      if (applyUpdate(await updateUser(liveProfile.id, { avatar: '' }))) {
-                        setMessage(t('profile.saved'))
-                        cancelEdit()
-                      }
-                    }}
-                  >
-                    {t('profile.removeAvatar')}
-                  </button>
-                  <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                    {t('common.cancel')}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="profile__hint">{t('profile.avatarBlocked')}</p>
-                <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                  {t('common.close')}
-                </button>
-              </>
-            )}
+            <label>
+              {t('profile.uploadImage')}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleAvatarFile(e.target.files?.[0])}
+              />
+            </label>
+            <label>
+              {t('profile.orImageUrl')}
+              <input
+                dir="ltr"
+                placeholder="https://..."
+                value={draft.avatar}
+                onChange={(e) => setDraft((d) => ({ ...d, avatar: e.target.value }))}
+              />
+            </label>
+            {/* No client-side plan gate: this always attempts the upload and
+                relies on updateUser's real backend response (400/403/etc,
+                surfaced below via `error`) rather than predicting it. */}
+            <div className="profile__form-actions">
+              <button type="submit" className="profile__btn">
+                {t('profile.saveUrl')}
+              </button>
+              <button
+                type="button"
+                className="profile__btn profile__btn--ghost"
+                onClick={async () => {
+                  if (applyUpdate(await updateUser(liveProfile.id, { avatar: '' }))) {
+                    setMessage(t('profile.saved'))
+                    cancelEdit()
+                  }
+                }}
+              >
+                {t('profile.removeAvatar')}
+              </button>
+              <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
+                {t('common.cancel')}
+              </button>
+            </div>
           </form>
         ) : (
           <p className="profile__hint">
             {liveProfile.avatar ? t('profile.avatarSet') : t('profile.avatarDefault')}
-            {!canChangeAvatar(liveProfile.subscription) && isOwn
-              ? t('profile.avatarBasicBlocked')
-              : ''}
           </p>
         )}
       </section>
@@ -661,38 +635,22 @@ export default function ProfilePage() {
       <section className="profile__card">
         <div className="profile__card-head">
           <h2>{t('profile.subscription')}</h2>
-          {isOwn && editing !== 'subscription' ? (
-            <button
-              type="button"
-              className="profile__link-btn"
-              onClick={() => startEdit('subscription')}
-            >
-              {t('common.edit')}
-            </button>
+          {isOwn ? (
+            <Link to="/payment" className="profile__link-btn">
+              {t('profile.changePlan')}
+            </Link>
           ) : null}
         </div>
-        {editing === 'subscription' ? (
-          <form className="profile__form" onSubmit={saveEdit}>
-            <label>
-              {t('profile.subscription')}
-              <select
-                value={draft.subscription}
-                onChange={(e) => setDraft((d) => ({ ...d, subscription: e.target.value }))}
-              >
-                <option value="basic">{subscriptionLabel('basic')}</option>
-                <option value="silver">{subscriptionLabel('silver')}</option>
-                <option value="gold">{subscriptionLabel('gold')}</option>
-              </select>
-            </label>
-            <div className="profile__form-actions">
-              <button type="submit" className="profile__btn">
-                {t('common.save')}
-              </button>
-              <button type="button" className="profile__btn profile__btn--ghost" onClick={cancelEdit}>
-                {t('common.cancel')}
-              </button>
-            </div>
-          </form>
+        {isOwn && currentSubscription ? (
+          <>
+            <p className="profile__value">{subscriptionLabel(currentSubscription.tier)}</p>
+            {currentSubscription.startDate && currentSubscription.endDate ? (
+              <p className="profile__hint" dir="ltr">
+                {currentSubscription.startDate} → {currentSubscription.endDate} (
+                {currentSubscription.status})
+              </p>
+            ) : null}
+          </>
         ) : (
           <p className="profile__value">{subscriptionLabel(liveProfile.subscription)}</p>
         )}

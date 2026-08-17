@@ -8,24 +8,22 @@ import './CatalogPages.css'
 
 export default function AlbumPage() {
   const { albumId } = useParams()
-  const { currentUser, getCatalog, getUserById } = useAuth()
+  const { getCatalog, getUserById } = useAuth()
   const { playingTrackId, playTrack } = usePlaying()
   const { t, formatNumber, language } = useI18n()
   const navigate = useNavigate()
   const catalog = getCatalog()
 
+  // catalog.albums/tracks are already early-access-filtered for this viewer
+  // by the backend (see AuthContext.refreshCatalog) — an early-access album
+  // the viewer isn't entitled to simply isn't in this list, so "not found"
+  // already covers both "doesn't exist" and "not accessible to you".
   const album = catalog.albums.find((item) => item.id === albumId)
   if (!album) return <Navigate to="/catalog" replace />
-
-  const isGold = currentUser?.subscription === 'gold'
-  if (album.earlyAccess && !isGold) {
-    return <Navigate to="/catalog" replace />
-  }
 
   const artist = getUserById(album.artistId)
   const tracks = catalog.tracks
     .filter((track) => track.albumId === album.id)
-    .filter((track) => isGold || !track.earlyAccess)
     .sort((a, b) => (b.plays || 0) - (a.plays || 0))
 
   function formatFeat(list) {
