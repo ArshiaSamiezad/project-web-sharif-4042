@@ -220,7 +220,8 @@ export default function useAudioPlayer(initialPlaylist = []) {
   }, []);
 
   const togglePlay = useCallback(() => {
-    isPlaying ? pause() : play();
+    if (isPlaying) pause();
+    else play();
   }, [isPlaying, play, pause]);
 
   const seek = useCallback((time) => {
@@ -308,7 +309,7 @@ export default function useAudioPlayer(initialPlaylist = []) {
     pause,
     togglePlay,
     seek,
-    setVolume,
+    setVolume: changeVolume,
     toggleMute,
     playNext,
     playPrevious,

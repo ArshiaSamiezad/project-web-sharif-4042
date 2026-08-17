@@ -132,7 +132,9 @@ export default function CatalogPage() {
       </div>
 
       {items.length === 0 ? (
-        <p className="catalog__empty">{t('catalog.empty')}</p>
+        <p className="catalog__empty">
+          {t(normalizedQuery ? 'catalog.empty' : 'catalog.emptyCatalog')}
+        </p>
       ) : (
         <div className="catalog__grid">
           {items.map((item) => {

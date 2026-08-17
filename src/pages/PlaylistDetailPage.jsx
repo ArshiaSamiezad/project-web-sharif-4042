@@ -180,7 +180,7 @@ export default function PlaylistDetailPage() {
                 <button
                   type="button"
                   className="album-track__cover"
-                  onClick={() => playTrack(track.id)}
+                  onClick={() => playTrack(track.id, tracks)}
                   aria-label={
                     isPlaying
                       ? t('common.pauseAria', { title: track.title })
@@ -193,7 +193,7 @@ export default function PlaylistDetailPage() {
                   <button
                     type="button"
                     className="album-track__title"
-                    onClick={() => playTrack(track.id)}
+                    onClick={() => playTrack(track.id, tracks)}
                   >
                     {track.title}
                   </button>

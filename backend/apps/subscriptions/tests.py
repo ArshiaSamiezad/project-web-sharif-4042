@@ -48,6 +48,14 @@ class PlanMixin:
 
 
 class EffectiveSubscriptionTests(PlanMixin, TestCase):
+    def test_missing_basic_seed_is_recreated_instead_of_raising(self):
+        self.basic.delete()
+
+        plan = services.get_basic_plan()
+
+        self.assertEqual(plan.tier, SubscriptionPlan.Tier.BASIC)
+        self.assertEqual(plan.playlist_limit, 6)
+
     def test_no_paid_subscription_falls_back_to_basic(self):
         user = make_user('eff_none')
         self.assertIsNone(services.get_effective_subscription(user))

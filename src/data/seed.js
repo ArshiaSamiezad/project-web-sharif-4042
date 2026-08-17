@@ -111,8 +111,8 @@ const SEED_USERS = [
     artistCode: null,
     bio: '',
     samples: [
-      { name: 'sepid-demo.mp3', size: 4200000, type: 'audio/mpeg' },
-      { name: 'sepid-live.wav', size: 18600000, type: 'audio/wav' },
+      { name: 'sepid-demo.mp3', size: 4200000, type: 'audio/mpeg', url: audioFor(0) },
+      { name: 'sepid-live.wav', size: 18600000, type: 'audio/wav', url: audioFor(1) },
     ],
     subscription: 'basic',
     avatar: null,
@@ -135,7 +135,7 @@ const SEED_USERS = [
     artistCode: null,
     bio: '',
     samples: [
-      { name: 'night-walk.flac', size: 24100000, type: 'audio/flac' },
+      { name: 'night-walk.flac', size: 24100000, type: 'audio/flac', url: audioFor(2) },
       { name: 'cover-art.png', size: 820000, type: 'image/png' },
     ],
     subscription: 'basic',

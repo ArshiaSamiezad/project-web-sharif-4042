@@ -36,7 +36,7 @@ export default function Controls({
       </button>
 
       <button type="button" onClick={onPrev} aria-label={t("player.previous")} className="controls__icon-btn">
-        <IoPlaySkipForward size={18} />
+        <IoPlaySkipBack size={18} />
       </button>
 
       <button
@@ -49,7 +49,7 @@ export default function Controls({
       </button>
 
       <button type="button" onClick={onNext} aria-label={t("player.next")} className="controls__icon-btn">
-        <IoPlaySkipBack size={18} />
+        <IoPlaySkipForward size={18} />
       </button>
 
       <button

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nProvider'
@@ -15,6 +15,18 @@ export default function StaffArtistDetailPage() {
   const [notice, setNotice] = useState('')
   const [rejecting, setRejecting] = useState(false)
   const [reason, setReason] = useState('')
+  const [playingSample, setPlayingSample] = useState(null)
+  const sampleAudioRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      const active = sampleAudioRef.current?.audio
+      if (!active) return
+      active.pause()
+      active.onended = null
+      active.onerror = null
+    }
+  }, [])
 
   const artist = getUserById(userId)
 
@@ -28,6 +40,40 @@ export default function StaffArtistDetailPage() {
 
   const samples = artist.samples || []
   const isPending = artist.status === 'pending'
+
+  function sampleKey(file, index) {
+    return `${file.name}-${file.size}-${index}`
+  }
+
+  async function toggleSample(file, index) {
+    const url = file.url || file.audioUrl
+    if (!url || !String(file.type || '').startsWith('audio/')) return
+
+    const key = sampleKey(file, index)
+    const active = sampleAudioRef.current
+    if (active?.key === key && !active.audio.paused) {
+      active.audio.pause()
+      setPlayingSample(null)
+      return
+    }
+
+    active?.audio.pause()
+    const audio = active?.key === key ? active.audio : new Audio(url)
+    audio.onended = () => setPlayingSample(null)
+    audio.onerror = () => {
+      setPlayingSample(null)
+      setError(t('staff.samplePlaybackFailed'))
+    }
+    sampleAudioRef.current = { key, audio }
+    setError('')
+    try {
+      await audio.play()
+      setPlayingSample(key)
+    } catch {
+      setPlayingSample(null)
+      setError(t('staff.samplePlaybackFailed'))
+    }
+  }
 
   function handleApprove() {
     setError('')
@@ -76,12 +122,37 @@ export default function StaffArtistDetailPage() {
           <p className="staff__hint">{t('staff.noSamples')}</p>
         ) : (
           <ul className="staff__samples">
-            {samples.map((file) => (
-              <li key={`${file.name}-${file.size}`}>
-                <span>{file.name}</span>
-                <span>{formatBytes(file.size, formatNumber)}</span>
-              </li>
-            ))}
+            {samples.map((file, index) => {
+              const key = sampleKey(file, index)
+              const playable =
+                Boolean(file.url || file.audioUrl) &&
+                String(file.type || '').startsWith('audio/')
+              const isPlaying = playingSample === key
+              return (
+                <li key={key} className={isPlaying ? 'is-playing' : undefined}>
+                  <button
+                    type="button"
+                    className="staff__sample"
+                    onClick={() => toggleSample(file, index)}
+                    disabled={!playable}
+                    aria-label={playable
+                      ? t(isPlaying ? 'staff.pauseSample' : 'staff.playSample', { name: file.name })
+                      : t('staff.sampleUnavailable', { name: file.name })}
+                  >
+                    <span className="staff__sample-icon" aria-hidden="true">
+                      {isPlaying ? 'Ⅱ' : playable ? '▶' : '—'}
+                    </span>
+                    <span className="staff__sample-info">
+                      <strong>{file.name}</strong>
+                      <small>{playable
+                        ? t(isPlaying ? 'staff.nowPlaying' : 'staff.clickToPlay')
+                        : t('staff.notPlayable')}</small>
+                    </span>
+                    <span className="staff__sample-size">{formatBytes(file.size, formatNumber)}</span>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>

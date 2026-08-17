@@ -414,12 +414,18 @@ export function AuthProvider({ children }) {
           })
         : {}
       const settings = { ...nextSettings, ...savedPreferences }
-      const nextUsers = getUsers().map((user) =>
-        idEq(user.id, currentUser.id) ||
-        user.email?.toLowerCase() === currentUser.email?.toLowerCase()
-          ? { ...user, settings }
-          : user,
-      )
+      let matchedLocalUser = false
+      const nextUsers = getUsers().map((user) => {
+        const matches =
+          idEq(user.id, currentUser.id) ||
+          user.email?.toLowerCase() === currentUser.email?.toLowerCase()
+        if (!matches) return user
+        matchedLocalUser = true
+        return { ...user, settings }
+      })
+      if (!matchedLocalUser) {
+        nextUsers.push({ ...currentUser, settings })
+      }
       persistUsers(nextUsers)
       setCurrentUser((user) => ({ ...user, settings }))
       return { ok: true, settings }

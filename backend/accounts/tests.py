@@ -27,6 +27,33 @@ class CoreAuthTests(APITestCase):
         user.refresh_from_db(); self.assertEqual(response.status_code, 200)
         self.assertEqual(user.role, User.Role.LISTENER); self.assertEqual(user.subscription, User.Subscription.BASIC)
 
+    def test_profile_accepts_uploaded_avatar_media_path(self):
+        user = User.objects.create_user(email="avatar@example.com", password="StrongPass!42", display_name="Avatar")
+        self.client.force_authenticate(user)
+
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"avatar": "/media/avatars/uploaded.png"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.avatar_url, "/media/avatars/uploaded.png")
+        self.assertEqual(response.data["avatar"], "/media/avatars/uploaded.png")
+
+    def test_profile_rejects_invalid_non_media_avatar_reference(self):
+        user = User.objects.create_user(email="bad-avatar@example.com", password="StrongPass!42", display_name="Avatar")
+        self.client.force_authenticate(user)
+
+        response = self.client.patch(
+            "/api/auth/me/",
+            {"avatar": "/somewhere/else.png"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_support_can_approve_artist_and_listener_cannot(self):
         applicant = User.objects.create_user(email="artist@example.com", password="StrongPass!42", display_name="Artist")
         item = ArtistVerification.objects.create(applicant=applicant, artist_name="Stage", sample_links=["https://example.com/demo"])
